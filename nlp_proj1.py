@@ -2,7 +2,7 @@ import random
 import numpy as np
 import tensorflow as tf
 
-print('Reading in word: to word embedding -- mapping words to vectors')
+print('Reading in word: to word embedding -- mapping words to vectors...')
 f = open('all_corpora_vectors.txt', "r")
 word_embed_raw = f.readlines()
 f.close()
