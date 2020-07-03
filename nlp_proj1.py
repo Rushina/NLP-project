@@ -44,7 +44,7 @@ for td in raw_train_data:
     train_pos.append(pos)
     train_neg.append(neg)
 
-print('Processing sentences into a single vector using word embedding')
+print('Processing sentences into a single vector using word embedding...')
 
 
 def word2vec(word):
