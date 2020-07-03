@@ -17,7 +17,7 @@ for w in word_embed_raw:
         data[1:].pop()
     word_embed[data[0]] = [float(x) for x in data[1:]]
 
-print('Reading in raw text (tokenized) -- question ID maps to question (title + body)')
+print('Reading in raw text (tokenized) -- question ID maps to question (title + body)...')
 
 f = open('data/texts_raw_fixed.txt', "r")
 raw_text_tokenized = f.readlines()
