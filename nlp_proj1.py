@@ -28,7 +28,7 @@ for q in raw_text_tokenized:
     data = q.split('\t')
     question_id[int(data[0])] = data[1:]
 
-print('Reading in training data -- query question ID, similar questions ID (pos), random questions ID (neg)')
+print('Reading in training data -- query question ID, similar questions ID (pos), random questions ID (neg)...')
 
 f = open('data/train_random.txt', "r")
 raw_train_data = f.readlines()
