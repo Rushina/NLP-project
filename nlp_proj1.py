@@ -16,7 +16,7 @@ class Logger(object):
 logger = Logger()
 
 logger.log('Reading in word: to word embedding -- mapping words to vectors...')
-f = open('all_corpora_vectors.txt', "r")
+f = open('data_folder/all_corpora_vectors.txt', "r")
 word_embed_raw = f.readlines()
 f.close()
 
@@ -32,7 +32,7 @@ for w in word_embed_raw:
 
 logger.log('Reading in raw text (tokenized) -- question ID maps to question (title + body)...')
 
-f = open('data/texts_raw_fixed.txt', "r")
+f = open('data_folder/data/texts_raw_fixed.txt', "r")
 raw_text_tokenized = f.readlines()
 f.close()
 
@@ -43,7 +43,7 @@ for q in raw_text_tokenized:
 
 logger.log('Reading in training data -- query question ID, similar questions ID (pos), random questions ID (neg)...')
 
-f = open('data/train_random.txt', "r")
+f = open('data_folder/data/train_random.txt', "r")
 raw_train_data = f.readlines()
 f.close()
 
