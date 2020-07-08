@@ -2,6 +2,7 @@ import random
 import numpy as np
 import tensorflow as tf
 import os
+import pickle
 
 class Logger(object):
     def __init__(self, mode='log'):
@@ -110,7 +111,7 @@ def generate_samples(qset, pos_set, neg_set, batch_inds, dims, question_id, word
             if (j >= n):
                 break
         if(j == 0):
-            logger.warn('No positive examples detected for example ' + str(i))
+            # logger.warn('No positive examples detected for example ' + str(i))
             r -= 1
             continue
         for neg in neg_set[i].split():
@@ -142,7 +143,7 @@ def loss_fn_wrap(dims):
         s1 = tf.keras.backend.sum(fp[:,:,:]*fq, axis=-1)
         s2 = s1/tf.keras.backend.sqrt(tf.keras.backend.sum(fq*fq, axis=-1))
         s = s2/tf.keras.backend.sqrt(tf.keras.backend.sum(fp*fp, axis = -1))
-        delta = 0.01
+        delta = 0.25
         labels = tf.reshape(y_true, (-1, (n+1), opveclen))[:, :-1, 0]
         diff = list()
         for i in range(s.shape[1]):
@@ -191,30 +192,16 @@ def main():
     logger = Logger('log')
 
     logger.log('Reading in word: to word embedding -- mapping words to vectors...')
-    f = open('data_folder/all_corpora_vectors.txt', "r")
-    word_embed_raw = f.readlines()
+    data_folder = "data_folder/created_data"
+    f = open(os.path.join(data_folder, "word_embed.pkl"), "rb")
+    word_embed = pickle.load(f)
     f.close()
-
-    word_embed = dict()
-    i = 0
-    for w in word_embed_raw:
-        data = w.split()
-        if (data[1] == '1/2'):
-            data[0] = '1 1/2'
-            data[1:-1] = data[2:]
-            data[1:].pop()
-        word_embed[data[0]] = [float(x) for x in data[1:]]
-
+    
     logger.log('Reading in raw text (tokenized) -- question ID maps to question (title + body)...')
 
-    f = open('data_folder/data/texts_raw_fixed.txt', "r")
-    raw_text_tokenized = f.readlines()
+    f = open(os.path.join(data_folder, "question_id.pkl"), "rb")
+    question_id = pickle.load(f)
     f.close()
-
-    question_id = dict()
-    for q in raw_text_tokenized:
-        data = q.split('\t')
-        question_id[int(data[0])] = data[1:]
 
     logger.log('Reading in training data -- query question ID, similar questions ID (pos), random questions ID (neg)...')
 
