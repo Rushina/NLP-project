@@ -99,6 +99,7 @@ def generate_samples(qset, pos_set, neg_set, batch_inds, dims, question_id, word
     labels = np.zeros((batch_size, n+1, opveclen))
     ques = np.zeros((batch_size, N, wlen))
     r = 0
+    not_batch_inds = [] 
     for i in batch_inds:
         q = qset[i] 
         j = 0
@@ -113,6 +114,10 @@ def generate_samples(qset, pos_set, neg_set, batch_inds, dims, question_id, word
         if(j == 0):
             # logger.warn('No positive examples detected for example ' + str(i))
             r -= 1
+            if not_batch_inds:
+                not_batch_inds.append(i)
+            else:
+                not_batch_inds = [i]
             continue
         for neg in neg_set[i].split():
             if (j >= n):
@@ -126,12 +131,14 @@ def generate_samples(qset, pos_set, neg_set, batch_inds, dims, question_id, word
             labels[r, j, :] = 0
             j += 1
         r += 1
-    labels = labels.reshape((batch_size, (n+1)*opveclen))
-    ques = tf.convert_to_tensor(ques.reshape(batch_size, 1, N, wlen), dtype=tf.float32) # batch_size X N X wlen
-    samples = tf.convert_to_tensor(samples, dtype=tf.float32) 
+    batch_size = r
+    batch_inds_new = [x for x in batch_inds if x not in not_batch_inds]
+    labels = labels[:batch_size, :, :].reshape((batch_size, (n+1)*opveclen))
+    ques = tf.convert_to_tensor(ques[:batch_size, :, :].reshape(batch_size, 1, N, wlen), dtype=tf.float32) # batch_size X N X wlen
+    samples = tf.convert_to_tensor(samples[:batch_size, :,:,:], dtype=tf.float32) 
     labels = tf.convert_to_tensor(labels, dtype=tf.float32)
     data = tf.concat([ques, samples], axis=1)
-    return (data, labels)
+    return (data, labels, batch_size, batch_inds_new)
 
 def loss_fn_wrap(dims):
     def loss_fn(y_true, y_pred):
@@ -164,6 +171,7 @@ def loss_fn_wrap(dims):
         ls = tf.keras.backend.max(tf.keras.backend.max(losst, axis=-1), axis=-1)
         return ls
     return loss_fn
+
 def fit_model(model, train_q, train_pos, train_neg,\
  batch_size, epochs, dims, question_id, word_embed, callbacks=[]):
     inds = range(len(train_q))
@@ -171,9 +179,9 @@ def fit_model(model, train_q, train_pos, train_neg,\
     for k in range(num_iter):
         batch_inds = random.sample(inds, batch_size)
         inds = [x for x in inds if x not in batch_inds]
-        data, labels = generate_samples(train_q, train_pos,\
+        data, labels, batch_size_curr, _ = generate_samples(train_q, train_pos,\
           train_neg, batch_inds, dims, question_id, word_embed)
-        model.fit(data, labels, batch_size=batch_size, \
+        model.fit(data, labels, batch_size=batch_size_curr, \
          epochs=1, callbacks=callbacks)
         op = model.predict(data)
     return model
@@ -181,7 +189,7 @@ def fit_model(model, train_q, train_pos, train_neg,\
 def post_process(test_file, model):
     test_q, test_pos, test_neg = read_question_data(test_file, num_fields=4)
     batch_inds = range(len(test_q))
-    test_ip, test_labels = generate_samples(test_q, test_pos, test_neg, batch_inds)
+    test_ip, test_labels, _, _ = generate_samples(test_q, test_pos, test_neg, batch_inds)
     test_op = model.predict(test_ip)
     print(test_op.shape)
     print(len(test_q))
@@ -230,7 +238,7 @@ def main():
         model.load_weights(checkpoint_path)
     else:
         model = fit_model(model, train_q, train_pos, train_neg, \
-         batch_size=10, epochs=1, dims=dims, \
+         batch_size=10, epochs=3, dims=dims, \
          question_id=question_id, word_embed=word_embed, \
          callbacks=[cp_callback])
 
