@@ -50,12 +50,14 @@ def map(y_pred, labels, dims):
         map_data += ap/cnt
     return map_data/num_data 
 
-def get_metrics(data_path, dims, loaded_data, metrics = ['mrr', 'pan1', 'pan5', 'map']):
+def get_metrics(data_path, dims, loaded_data, metrics = ['mrr', 'pan1', 'pan5', 'map'], num_data=[]):
     n, N, wlen, opveclen = dims
     word_embed, question_id, model = loaded_data
     q, pos, neg = read_question_data(data_path)
+    if (num_data == []):
+        num_data = len(q)
     res = dict()
-    batch_size = 10
+    batch_size = min(10, num_data)
     i = 0
     mrr_data = 0.0
     prec1_data = 0.0
@@ -63,23 +65,24 @@ def get_metrics(data_path, dims, loaded_data, metrics = ['mrr', 'pan1', 'pan5', 
     total_pos = 0
     map_data = 0.0
     cnt_data_points = 0
-    while (i < len(q)):
+    while (i < num_data-batch_size):
         print('Analyzing data points ', i, ' through ', i+batch_size, '...')
         data, labels, batch_size_curr, _ = generate_samples(q, pos, neg,\
          range(i, i + batch_size), dims, question_id, word_embed)
         labels = np.reshape(labels, (-1, (n+1), opveclen))[:, :-1, 0]
-        op = np.array(model.predict(data))
-        data = np.array(data)
-        labels = np.array(labels)
-        total_pos += np.sum(labels)
-        if ('mrr' in metrics):
-            mrr_data += mrr(op, labels, dims)*batch_size_curr
-        if ('pan1' in metrics):
-            prec1_data += precision_at_k(op, labels, dims, 1)*batch_size_curr
-        if ('pan5' in metrics):
-            prec5_data += precision_at_k(op, labels, dims, 5)*batch_size_curr
-        if ('map' in metrics):
-            map_data += map(op, labels, dims)*batch_size_curr
+        if not batch_size_curr == 0:
+            op = np.array(model.predict(data))
+            data = np.array(data)
+            labels = np.array(labels)
+            total_pos += np.sum(labels)
+            if ('mrr' in metrics):
+                mrr_data += mrr(op, labels, dims)*batch_size_curr
+            if ('pan1' in metrics):
+                prec1_data += precision_at_k(op, labels, dims, 1)*batch_size_curr
+            if ('pan5' in metrics):
+                prec5_data += precision_at_k(op, labels, dims, 5)*batch_size_curr
+            if ('map' in metrics):
+                map_data += map(op, labels, dims)*batch_size_curr
         i += batch_size
         cnt_data_points += batch_size_curr
     res['mrr'] = mrr_data/cnt_data_points
@@ -121,7 +124,7 @@ def verify_samples(data_path, dims, loaded_data, batch_size=10, num_pos=5, metri
         
     
 def main():
-    model_name = 'simple_nn2'
+    model_name = 'simple_nn3'
     model_dir = 'saved_model'
     model_path = os.path.join(model_dir, model_name)
 
@@ -156,8 +159,8 @@ def main():
     test_path = os.path.join(data_folder, test_file)
     train_path = os.path.join(data_folder, train_file)
 
-    # print(get_metrics(dev_path, dims, loaded_data))
-    print(get_metrics(train_path, dims, loaded_data))
+    print(get_metrics(dev_path, dims, loaded_data))
+    # print(get_metrics(train_path, dims, loaded_data, num_data=100))
     verify_samples(train_path, dims, loaded_data, batch_size=3, num_pos=3) 
 
     # print(get_mrr(test_path, dims, loaded_data))
