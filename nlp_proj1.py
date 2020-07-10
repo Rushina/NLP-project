@@ -25,7 +25,7 @@ class Logger(object):
         print('ERROR: ', str)
 
     
-def read_question_data(filename, num_fields = 3):
+def read_question_data(filename):
     f = open(filename, "r")
     raw_data = f.readlines()
     f.close()
@@ -34,9 +34,9 @@ def read_question_data(filename, num_fields = 3):
     neg = list()
     for td in raw_data:
         qi, posi, negi = [], [], []
-        if (num_fields == 3):
+        if (len(td.split('\t')) == 3):
             qi, posi, negi = td.split('\t')
-        elif (num_fields == 4):
+        elif (len(td.split('\t')) == 4):
             qi, posi, negi, _ = td.split('\t')
         q.append(qi)
         pos.append(posi)
@@ -113,7 +113,6 @@ def generate_samples(qset, pos_set, neg_set, batch_inds, dims, question_id, word
                 break
         if(j == 0):
             # logger.warn('No positive examples detected for example ' + str(i))
-            r -= 1
             if not_batch_inds:
                 not_batch_inds.append(i)
             else:
@@ -187,7 +186,7 @@ def fit_model(model, train_q, train_pos, train_neg,\
     return model
     
 def post_process(test_file, model):
-    test_q, test_pos, test_neg = read_question_data(test_file, num_fields=4)
+    test_q, test_pos, test_neg = read_question_data(test_file)
     batch_inds = range(len(test_q))
     test_ip, test_labels, _, _ = generate_samples(test_q, test_pos, test_neg, batch_inds)
     test_op = model.predict(test_ip)
