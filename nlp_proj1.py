@@ -139,21 +139,26 @@ def generate_samples(qset, pos_set, neg_set, batch_inds, dims, question_id, word
     data = tf.concat([ques, samples], axis=1)
     return (data, labels, batch_size, batch_inds_new)
 
+def similarity(y_pred, dims):
+    n, N, wlen, opveclen = dims
+    fq = []
+    fp = []
+    fq = tf.reshape(y_pred[:,0:opveclen], (-1, 1, opveclen))
+    fp = tf.reshape(y_pred[:, opveclen:], (-1, n, opveclen))
+    s1 = tf.keras.backend.sum(fp[:,:,:]*fq, axis=-1)
+    s2 = s1/tf.keras.backend.sqrt(tf.keras.backend.sum(fq*fq, axis=-1))
+    s = s2/tf.keras.backend.sqrt(tf.keras.backend.sum(fp*fp, axis = -1))
+    return s
+
 def loss_fn_wrap(dims):
     def loss_fn(y_true, y_pred):
         n, N, wlen, opveclen = dims
-        fq = []
-        fp = []
-        fq = tf.reshape(y_pred[:,0:opveclen], (-1, 1, opveclen))
-        fp = tf.reshape(y_pred[:, opveclen:], (-1, n, opveclen))
-        s1 = tf.keras.backend.sum(fp[:,:,:]*fq, axis=-1)
-        s2 = s1/tf.keras.backend.sqrt(tf.keras.backend.sum(fq*fq, axis=-1))
-        s = s2/tf.keras.backend.sqrt(tf.keras.backend.sum(fp*fp, axis = -1))
+        s = similarity(y_pred, dims)
         delta = 0.25
         labels = tf.reshape(y_true, (-1, (n+1), opveclen))[:, :-1, 0]
         diff = list()
         for i in range(s.shape[1]):
-            d = s[:, i:i+1] - s + labels[:, i:i+1]*delta
+            d = s[:, i:i+1] - s + (1 - labels[:, i:i+1])*delta
             if not diff:
                 diff = [d]
             else:
@@ -170,6 +175,36 @@ def loss_fn_wrap(dims):
         ls = tf.keras.backend.max(tf.keras.backend.max(losst, axis=-1), axis=-1)
         return ls
     return loss_fn
+
+def fit_model_single_data_point(model, train_q, train_pos, train_neg, batch_ind, epochs, dims, question_id, word_embed, logger):
+    print("Training with a single data point")
+    for k in range(epochs):
+        print(k)
+        batch_inds = [batch_ind]
+        data, labels, batch_size_curr, _ = generate_samples(train_q, train_pos, train_neg, batch_inds, dims, question_id, word_embed)
+        if (batch_size_curr == 0):
+            logger.error("Data point provided has no positive examples. Please run again with valid data point.")
+            return
+        model.fit(data, labels, batch_size=batch_size_curr, epochs=1)
+    op = model.predict(data)
+    loss_fn = loss_fn_wrap(dims)
+    print("Loss of output: ", loss_fn(labels, op))
+    sim = np.array(similarity(op, dims))
+    print(sim.shape)
+    sim_inds = np.argsort(-sim, axis=1)
+    pos_i = train_pos[batch_ind].split()
+    neg_i = train_neg[batch_ind].split()
+    for i, ind in enumerate(sim_inds[0]):
+        if (ind < len(pos_i)):
+            print("Rank: ", i+1, " positive. Similarity: ", sim[0, ind])
+            # print(question_id[int(pos_i[ind])])
+        elif (ind < len(pos_i) + len(neg_i)):
+            print("Rank: ", i+1, "negative. Similarity: ", sim[0, ind])
+            # print(question_id[int(neg_i[ind-len(pos_i)])])
+        else:
+            print("Rank: ", i+1, "negative. Similarity: ", sim[0, ind])
+            # print(question_id[int(neg_i[len(neg_i)-1])])
+    return model 
 
 def fit_model(model, train_q, train_pos, train_neg,\
  batch_size, epochs, dims, question_id, word_embed, callbacks=[]):
@@ -233,17 +268,21 @@ def main():
                                                      verbose=1)
 
     load_from_checkpoint = False
+    train_with_one_datapoint = False
     if (load_from_checkpoint):
         model.load_weights(checkpoint_path)
     else:
-        model = fit_model(model, train_q, train_pos, train_neg, \
-         batch_size=10, epochs=3, dims=dims, \
-         question_id=question_id, word_embed=word_embed, \
-         callbacks=[cp_callback])
+        if train_with_one_datapoint:
+            model = fit_model_single_data_point(model, train_q, train_pos, train_neg, epochs=10, batch_ind=1, dims=dims, question_id=question_id, word_embed=word_embed, logger=logger)
+        else:
+            model = fit_model(model, train_q, train_pos, train_neg, \
+             batch_size=10, epochs=1, dims=dims, \
+             question_id=question_id, word_embed=word_embed, \
+             callbacks=[cp_callback])
 
     # !mkdir -p saved_model
-    model.save('saved_model/simple_nn1')
-    post_process('data_folder/data/test.txt', model)
+    # model.save('saved_model/simple_nn1')
+    # post_process('data_folder/data/test.txt', model)
 
 if __name__ == "__main__":
     main()

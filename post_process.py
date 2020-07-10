@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import os
-from nlp_proj1 import read_question_data, generate_samples, loss_fn_wrap
+from nlp_proj1 import read_question_data, generate_samples, loss_fn_wrap, similarity
 import pickle
 import random
 
@@ -14,13 +14,7 @@ def rank(y_pred, dims):
     # Most similar sample ranked first
     
     n, N, wlen, opveclen = dims
-    fq = []
-    fp = []
-    fq = np.reshape(y_pred[:,0:opveclen], (-1, 1, opveclen))
-    fp = np.reshape(y_pred[:, opveclen:], (-1, n, opveclen))
-    s1 = np.sum(fp[:,:,:]*fq, axis=-1)
-    s2 = s1/np.sqrt(np.sum(fq*fq, axis=-1))
-    s = s2/np.sqrt(np.sum(fp*fp, axis = -1))
+    s = np.array(similarity(y_pred, dims))
     x = np.argsort(-s, axis=1)
     r = np.argsort(x, axis=1) + 1 # indexing by 1
     return (x,r)
