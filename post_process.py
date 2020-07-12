@@ -30,10 +30,11 @@ def mrr(y_pred, labels, dims):
 
 def precision_at_k(y_pred, labels, dims, k):
     n, N, wlen, opveclen = dims
-    _, r = rank(y_pred, dims)
-    ind_rank_k = np.where(r < k)
-    pos_at_k = labels[ind_rank_k]
-    precision = np.sum(pos_at_k)/(k*labels.shape[0])
+    x, _ = rank(y_pred, dims)
+    ordered_labels = np.zeros_like(labels)
+    for (i, lab) in enumerate(labels):
+        ordered_labels[i, :] = labels[i, x[i,:]]
+    precision = np.sum(labels[:, :k])/(k*labels.shape[0])
     return precision 
 
 def map(y_pred, labels, dims):
@@ -57,7 +58,7 @@ def get_metrics(data_path, dims, loaded_data, metrics = ['mrr', 'pan1', 'pan5', 
     if (num_data == []):
         num_data = len(q)
     res = dict()
-    batch_size = min(10, num_data)
+    batch_size = min(10, num_data-1)
     i = 0
     mrr_data = 0.0
     prec1_data = 0.0
@@ -92,11 +93,13 @@ def get_metrics(data_path, dims, loaded_data, metrics = ['mrr', 'pan1', 'pan5', 
     print('This data set has ', total_pos, ' number of positive examples for ', len(q), ' query questions.')
     return res
 
-def verify_samples(data_path, dims, loaded_data, batch_size=10, num_pos=5, metrics = ['mrr', 'pan1', 'pan5', 'map']):
+def verify_samples(data_path, dims, loaded_data, batch_size=10, num_pos=5, metrics = ['mrr', 'pan1', 'pan5', 'map'], randomly=True):
     n, N, wlen, opveclen = dims
     word_embed, question_id, model = loaded_data
     q, pos, neg = read_question_data(data_path)
     batch_inds = random.sample(range(len(q)), batch_size)
+    if not randomly:
+        batch_inds = range(batch_size)
     data, labels, batch_size_curr, batch_inds_curr = generate_samples(q, pos, neg,\
      batch_inds, dims, question_id, word_embed)
     print(batch_size_curr)
@@ -159,9 +162,9 @@ def main():
     test_path = os.path.join(data_folder, test_file)
     train_path = os.path.join(data_folder, train_file)
 
-    print(get_metrics(dev_path, dims, loaded_data))
-    # print(get_metrics(train_path, dims, loaded_data, num_data=100))
-    verify_samples(train_path, dims, loaded_data, batch_size=3, num_pos=3) 
+    # print(get_metrics(dev_path, dims, loaded_data))
+    print(get_metrics(train_path, dims, loaded_data, num_data=100))
+    verify_samples(train_path, dims, loaded_data, batch_size=10, num_pos=1, randomly=False) 
 
     # print(get_mrr(test_path, dims, loaded_data))
 
