@@ -230,8 +230,8 @@ def fit_model(model, train_q, train_pos, train_neg,\
             op = model.predict(data)
             curr_loss = tf.keras.backend.mean(loss_fn(labels, op))
             print("Current loss = ", curr_loss)
-            if ((curr_loss) < 0.05):
-                return model 
+            # if ((curr_loss) < 0.05):
+            #    return model 
     return model
     
 def post_process(test_file, model):
@@ -282,24 +282,25 @@ def main():
                                                      verbose=1)
 
     load_from_checkpoint = False
-    train_with_one_datapoint = False
-    train_with_short_set = False
+    train_with_one_datapoint = False 
+    train_with_short_set = True 
     if (load_from_checkpoint):
         model.load_weights(checkpoint_path)
     else:
         if train_with_one_datapoint:
-            model = fit_model_single_data_point(model, train_q, train_pos, train_neg, epochs=10, batch_ind=1, dims=dims, question_id=question_id, word_embed=word_embed, logger=logger)
+            model = fit_model_single_data_point(model, train_q, train_pos, train_neg, epochs=10, batch_ind=15, dims=dims, question_id=question_id, word_embed=word_embed, logger=logger)
         else:
-            num_data = 100
+            num_data = 10
             if not train_with_short_set:
                 num_data = []
             model = fit_model(model, train_q, train_pos, train_neg, \
-             batch_size=10, epochs=10, dims=dims, \
+             batch_size=10, epochs=40, dims=dims, \
              question_id=question_id, word_embed=word_embed, \
              callbacks=[cp_callback], num_data = num_data)
 
     # !mkdir -p saved_model
-    model.save('saved_model/simple_nn3')
+    if not train_with_one_datapoint:
+        model.save('saved_model/simple_nn3_short_data')
     # post_process('data_folder/data/test.txt', model)
 
 if __name__ == "__main__":
