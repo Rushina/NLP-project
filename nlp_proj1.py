@@ -177,8 +177,11 @@ def loss_fn_wrap(dims):
     return loss_fn
 
 def fit_model_single_data_point(model, train_q, train_pos, train_neg, batch_ind, epochs, dims, question_id, word_embed, logger):
-    print("Training with a single data point")
-    for k in range(epochs):
+    print("Training with a single data point ", batch_ind)
+    loss_fn = loss_fn_wrap(dims)
+    loss = 0.25
+    k = 0
+    while loss >= 1e-4:
         print(k)
         batch_inds = [batch_ind]
         data, labels, batch_size_curr, _ = generate_samples(train_q, train_pos, train_neg, batch_inds, dims, question_id, word_embed)
@@ -186,8 +189,10 @@ def fit_model_single_data_point(model, train_q, train_pos, train_neg, batch_ind,
             logger.error("Data point provided has no positive examples. Please run again with valid data point.")
             return
         model.fit(data, labels, batch_size=batch_size_curr, epochs=1)
-    op = model.predict(data)
-    loss_fn = loss_fn_wrap(dims)
+        op = model.predict(data)
+        loss = loss_fn(labels, op)
+        k += 1
+
     print("Loss of output: ", loss_fn(labels, op))
     sim = np.array(similarity(op, dims))
     print(sim.shape)
@@ -213,6 +218,7 @@ def fit_model(model, train_q, train_pos, train_neg,\
         num_data = len(train_q)
     num_iter = int(num_data/batch_size)
     for e in range(epochs):
+        print("Actual epoch = ", (e+1),"/", (epochs))
         inds = range(num_data)
         for k in range(num_iter):
             batch_inds = [] 
@@ -226,12 +232,13 @@ def fit_model(model, train_q, train_pos, train_neg,\
             data, labels, batch_size_curr, _ = generate_samples(train_q,\
              train_pos, train_neg, batch_inds, dims, question_id, word_embed)
             model.fit(data, labels, batch_size=batch_size_curr, \
-             epochs=1, callbacks=callbacks)
-            op = model.predict(data)
-            curr_loss = tf.keras.backend.mean(loss_fn(labels, op))
-            print("Current loss = ", curr_loss)
-            # if ((curr_loss) < 0.05):
-            #    return model 
+             epochs=1, callbacks=callbacks, verbose=0)
+        op = model.predict(data)
+        sim = similarity(op, dims)
+        curr_loss = tf.keras.backend.mean(loss_fn(labels, op))
+        print("Current loss = ", curr_loss, " at the end of epoch ", e+1, ".")
+        # if ((curr_loss) < 0.05):
+        #    return model 
     return model
     
 def post_process(test_file, model):
@@ -288,19 +295,22 @@ def main():
         model.load_weights(checkpoint_path)
     else:
         if train_with_one_datapoint:
-            model = fit_model_single_data_point(model, train_q, train_pos, train_neg, epochs=10, batch_ind=15, dims=dims, question_id=question_id, word_embed=word_embed, logger=logger)
+            # batch_ind = random.randrange(len(train_q))
+            batch_ind = 2
+            model = fit_model_single_data_point(model, train_q, train_pos, train_neg, epochs=10, batch_ind = batch_ind, dims=dims, question_id=question_id, word_embed=word_embed, logger=logger)
         else:
-            num_data = 10
+            num_data = 2 
             if not train_with_short_set:
                 num_data = []
             model = fit_model(model, train_q, train_pos, train_neg, \
-             batch_size=10, epochs=40, dims=dims, \
+             batch_size=2, epochs=20, dims=dims, \
              question_id=question_id, word_embed=word_embed, \
              callbacks=[cp_callback], num_data = num_data)
+            
 
     # !mkdir -p saved_model
     if not train_with_one_datapoint:
-        model.save('saved_model/simple_nn3_short_data')
+        model.save('saved_model/simple_nn4_short1000')
     # post_process('data_folder/data/test.txt', model)
 
 if __name__ == "__main__":
