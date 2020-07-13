@@ -34,7 +34,7 @@ def precision_at_k(y_pred, labels, dims, k):
     ordered_labels = np.zeros_like(labels)
     for (i, lab) in enumerate(labels):
         ordered_labels[i, :] = labels[i, x[i,:]]
-    precision = np.sum(labels[:, :k])/(k*labels.shape[0])
+    precision = np.sum(ordered_labels[:, :k])/(k*labels.shape[0])
     return precision 
 
 def map(y_pred, labels, dims):
@@ -127,7 +127,7 @@ def verify_samples(data_path, dims, loaded_data, batch_size=10, num_pos=5, metri
         
     
 def main():
-    model_name = 'simple_nn3'
+    model_name = 'simple_nn4_short'
     model_dir = 'saved_model'
     model_path = os.path.join(model_dir, model_name)
 
@@ -163,7 +163,8 @@ def main():
     train_path = os.path.join(data_folder, train_file)
 
     # print(get_metrics(dev_path, dims, loaded_data))
-    print(get_metrics(train_path, dims, loaded_data, num_data=100))
+    print("Training metrics for 100 points: ", get_metrics(train_path, dims, loaded_data, num_data=100))
+    # print("Dev metrics: ", get_metrics(dev_path, dims, loaded_data))
     verify_samples(train_path, dims, loaded_data, batch_size=10, num_pos=1, randomly=False) 
 
     # print(get_mrr(test_path, dims, loaded_data))
