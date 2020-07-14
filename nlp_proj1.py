@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 import os
 import pickle
+from sample_generator import SampleGenerator
 
 class Logger(object):
     def __init__(self, mode='log'):
@@ -38,38 +39,12 @@ def read_question_data(filename):
             qi, posi, negi = td.split('\t')
         elif (len(td.split('\t')) == 4):
             qi, posi, negi, _ = td.split('\t')
-        q.append(qi)
-        pos.append(posi)
-        neg.append(negi)
+        posi_list = posi.split()
+        for pi in posi_list:
+            q.append(qi)
+            pos.append(pi)
+            neg.append(negi)
     return (q, pos, neg)
-
-def word2vec(word, word_embed):
-    if not word in word_embed.keys():
-        return np.zeros_like(word_embed['the'])
-    return np.array(word_embed[word])
-
-def sentence2vec_avg(sentence, word_embed):
-    words = sentence.split()
-    n = len(words)
-    vec = np.zeros((n, len(word_embed['the'])))
-    for (i,w) in enumerate(words):
-        vec[i] = word2vec(w, word_embed)
-    return vec 
-
-def question2vec(question, N, word_embed):
-    title, body = question
-    title_vec = sentence2vec_avg(title, word_embed)
-    body_vec = sentence2vec_avg(body, word_embed)
-    vec = np.vstack((title_vec, body_vec))
-    n = vec.shape[0]
-    if n > N:
-        vec = vec[:N, :]
-    elif n < N:
-        pad = np.zeros((N-n, vec.shape[1]))
-        vec = np.vstack((vec, pad))
-    return vec
-
-
 
 def average(x):
     return tf.keras.backend.mean(x, axis=-2)
@@ -86,58 +61,6 @@ def create_model(dims):
 
     model = tf.keras.models.Model(inputs=ip, outputs=op)
     return model
-
-
-def generate_samples(qset, pos_set, neg_set, batch_inds, dims, question_id, word_embed):
-    n, N, wlen, opveclen = dims
-    # n : number of sample questions per query
-    # N : number of words per sentence
-    # wlen : length of word embedding vector
-    # opveclen : length of output vector
-    batch_size = len(batch_inds) 
-    samples = np.zeros((batch_size, n, N, wlen))
-    labels = np.zeros((batch_size, n+1, opveclen))
-    ques = np.zeros((batch_size, N, wlen))
-    r = 0
-    not_batch_inds = [] 
-    for i in batch_inds:
-        q = qset[i] 
-        j = 0
-        ques[r, :, :] = question2vec(question_id[int(q)], N, word_embed)
-        for pos in pos_set[i].split():
-            p = int(pos)
-            samples[r, j, :, :] = question2vec(question_id[int(p)], N, word_embed)
-            labels[r, j, :] = 1
-            j += 1
-            if (j >= n):
-                break
-        if(j == 0):
-            # logger.warn('No positive examples detected for example ' + str(i))
-            if not_batch_inds:
-                not_batch_inds.append(i)
-            else:
-                not_batch_inds = [i]
-            continue
-        for neg in neg_set[i].split():
-            if (j >= n):
-                break
-            ns = int(neg)
-            samples[r, j, :, :] = question2vec(question_id[int(ns)], N, word_embed)
-            labels[r, j, :] = 0
-            j += 1
-        while (j < n):
-            samples[r, j, :, :] = question2vec(question_id[int(ns)], N, word_embed)
-            labels[r, j, :] = 0
-            j += 1
-        r += 1
-    batch_size = r
-    batch_inds_new = [x for x in batch_inds if x not in not_batch_inds]
-    labels = labels[:batch_size, :, :].reshape((batch_size, (n+1)*opveclen))
-    ques = tf.convert_to_tensor(ques[:batch_size, :, :].reshape(batch_size, 1, N, wlen), dtype=tf.float32) # batch_size X N X wlen
-    samples = tf.convert_to_tensor(samples[:batch_size, :,:,:], dtype=tf.float32) 
-    labels = tf.convert_to_tensor(labels, dtype=tf.float32)
-    data = tf.concat([ques, samples], axis=1)
-    return (data, labels, batch_size, batch_inds_new)
 
 def similarity(y_pred, dims):
     n, N, wlen, opveclen = dims
@@ -176,18 +99,21 @@ def loss_fn_wrap(dims):
         return ls
     return loss_fn
 
-def fit_model_single_data_point(model, train_q, train_pos, train_neg, batch_ind, epochs, dims, question_id, word_embed, logger):
+def fit_model_single_data_point(model, sample_gen, batch_ind, epochs, dims, logger):
     print("Training with a single data point ", batch_ind)
     loss_fn = loss_fn_wrap(dims)
     loss = 0.25
     k = 0
-    while loss >= 1e-4:
+    
+    batch_inds = [batch_ind]
+    data, labels, batch_size_curr, _ = sample_gen.generate_samples(batch_inds)
+    print("Labels = ", tf.reshape(labels, (batch_size_curr, 121, -1))[0, :, 0])
+    print("Current batch size = ", batch_size_curr)
+    if (batch_size_curr == 0):
+        logger.error("Data point provided has no positive examples. Please run again with valid data point.")
+        return
+    while (k < epochs):
         print(k)
-        batch_inds = [batch_ind]
-        data, labels, batch_size_curr, _ = generate_samples(train_q, train_pos, train_neg, batch_inds, dims, question_id, word_embed)
-        if (batch_size_curr == 0):
-            logger.error("Data point provided has no positive examples. Please run again with valid data point.")
-            return
         model.fit(data, labels, batch_size=batch_size_curr, epochs=1)
         op = model.predict(data)
         loss = loss_fn(labels, op)
@@ -197,8 +123,9 @@ def fit_model_single_data_point(model, train_q, train_pos, train_neg, batch_ind,
     sim = np.array(similarity(op, dims))
     print(sim.shape)
     sim_inds = np.argsort(-sim, axis=1)
-    pos_i = train_pos[batch_ind].split()
-    neg_i = train_neg[batch_ind].split()
+    pos_i = sample_gen.pos_set[batch_ind].split()
+    print(len(pos_i))
+    neg_i = sample_gen.neg_set[batch_ind].split()
     for i, ind in enumerate(sim_inds[0]):
         if (ind < len(pos_i)):
             print("Rank: ", i+1, " positive. Similarity: ", sim[0, ind])
@@ -211,8 +138,7 @@ def fit_model_single_data_point(model, train_q, train_pos, train_neg, batch_ind,
             # print(question_id[int(neg_i[len(neg_i)-1])])
     return model 
 
-def fit_model(model, train_q, train_pos, train_neg,\
- batch_size, epochs, dims, question_id, word_embed, callbacks=[], num_data=[]):
+def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_data=[]):
     loss_fn = loss_fn_wrap(dims)
     if (num_data == []):
         num_data = len(train_q)
@@ -229,8 +155,7 @@ def fit_model(model, train_q, train_pos, train_neg,\
             else:
                 batch_inds = inds
             inds = [x for x in inds if x not in batch_inds]
-            data, labels, batch_size_curr, _ = generate_samples(train_q,\
-             train_pos, train_neg, batch_inds, dims, question_id, word_embed)
+            data, labels, batch_size_curr, _ = sample_gen.generate_samples(batch_inds)
             model.fit(data, labels, batch_size=batch_size_curr, \
              epochs=1, callbacks=callbacks, verbose=0)
         op = model.predict(data)
@@ -241,15 +166,6 @@ def fit_model(model, train_q, train_pos, train_neg,\
         #    return model 
     return model
     
-def post_process(test_file, model):
-    test_q, test_pos, test_neg = read_question_data(test_file)
-    batch_inds = range(len(test_q))
-    test_ip, test_labels, _, _ = generate_samples(test_q, test_pos, test_neg, batch_inds)
-    test_op = model.predict(test_ip)
-    print(test_op.shape)
-    print(len(test_q))
-
-
 
 def main():
     logger = Logger('log')
@@ -269,6 +185,7 @@ def main():
     logger.log('Reading in training data -- query question ID, similar questions ID (pos), random questions ID (neg)...')
 
     train_q, train_pos, train_neg = read_question_data('data_folder/data/train_random.txt')
+    
     logger.log('Creating Model ...')
 
     n = 120 # number of sample questions per query question
@@ -277,6 +194,7 @@ def main():
     wlen = len(word_embed['the'])
     dims = n, N, wlen, opveclen 
     model = create_model(dims)
+    train_sample_generator = SampleGenerator(question_id, train_q, train_pos, train_neg, dims, word_embed)
 
     logger.log('Model inputs and outputs')
     loss_fn = loss_fn_wrap(dims)
@@ -296,15 +214,14 @@ def main():
     else:
         if train_with_one_datapoint:
             # batch_ind = random.randrange(len(train_q))
-            batch_ind = 2
-            model = fit_model_single_data_point(model, train_q, train_pos, train_neg, epochs=10, batch_ind = batch_ind, dims=dims, question_id=question_id, word_embed=word_embed, logger=logger)
+            batch_ind = 2 
+            model = fit_model_single_data_point(model, train_sample_generator, epochs=10, batch_ind = batch_ind, dims=dims, logger=logger)
         else:
-            num_data = 2 
+            num_data = 1000 
             if not train_with_short_set:
                 num_data = []
-            model = fit_model(model, train_q, train_pos, train_neg, \
-             batch_size=2, epochs=20, dims=dims, \
-             question_id=question_id, word_embed=word_embed, \
+            model = fit_model(model, train_sample_generator, \
+             batch_size=2, epochs=50, dims=dims, \
              callbacks=[cp_callback], num_data = num_data)
             
 
