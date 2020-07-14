@@ -1,7 +1,8 @@
 import tensorflow as tf
 import numpy as np
 import os
-from nlp_proj1 import read_question_data, generate_samples, loss_fn_wrap, similarity
+from nlp_proj1 import read_question_data, loss_fn_wrap, similarity
+from sample_generator import SampleGenerator
 import pickle
 import random
 
@@ -51,10 +52,11 @@ def map(y_pred, labels, dims):
         map_data += ap/cnt
     return map_data/num_data 
 
-def get_metrics(data_path, dims, loaded_data, metrics = ['mrr', 'pan1', 'pan5', 'map'], num_data=[]):
+def get_metrics(data_path, sample_gen, dims, loaded_data, metrics = ['mrr', 'pan1', 'pan5', 'map'], num_data=[]):
     n, N, wlen, opveclen = dims
     word_embed, question_id, model = loaded_data
     q, pos, neg = read_question_data(data_path)
+    print("Number of data points: ", len(q), len(sample_gen.qset))
     if (num_data == []):
         num_data = len(q)
     res = dict()
@@ -68,8 +70,8 @@ def get_metrics(data_path, dims, loaded_data, metrics = ['mrr', 'pan1', 'pan5', 
     cnt_data_points = 0
     while (i < num_data-batch_size):
         print('Analyzing data points ', i, ' through ', i+batch_size, '...')
-        data, labels, batch_size_curr, _ = generate_samples(q, pos, neg,\
-         range(i, i + batch_size), dims, question_id, word_embed)
+        data, labels, batch_size_curr, _ = sample_gen.generate_samples( \
+         range(i, i + batch_size))
         labels = np.reshape(labels, (-1, (n+1), opveclen))[:, :-1, 0]
         if not batch_size_curr == 0:
             op = np.array(model.predict(data))
@@ -93,41 +95,39 @@ def get_metrics(data_path, dims, loaded_data, metrics = ['mrr', 'pan1', 'pan5', 
     print('This data set has ', total_pos, ' number of positive examples for ', len(q), ' query questions.')
     return res
 
-def verify_samples(data_path, dims, loaded_data, batch_size=10, num_pos=5, metrics = ['mrr', 'pan1', 'pan5', 'map'], randomly=True):
+def verify_samples(sample_gen, model, dims, batch_size=10, num_pos=5, randomly=True):
     n, N, wlen, opveclen = dims
-    word_embed, question_id, model = loaded_data
-    q, pos, neg = read_question_data(data_path)
-    batch_inds = random.sample(range(len(q)), batch_size)
+    loss_fn = loss_fn_wrap(dims)
+    batch_inds = random.sample(range(len(sample_gen.qset)), batch_size)
     if not randomly:
         batch_inds = range(batch_size)
-    data, labels, batch_size_curr, batch_inds_curr = generate_samples(q, pos, neg,\
-     batch_inds, dims, question_id, word_embed)
-    print(batch_size_curr)
-    print(data.shape)
+    data, labels, batch_size_curr, batch_inds_curr = \
+            sample_gen.generate_samples(batch_inds)
     op = model.predict(data)
-    x, _ = rank(op, dims) 
-    print(x.shape, len(batch_inds_curr))
-    for i, b in enumerate(batch_inds_curr):
-        top_inds = x[i, :num_pos] 
-        print("================== Query Question =======================")
-        print(question_id[int(q[i])])
-        pos_i = pos[i].split()
-        neg_i = neg[i].split()
-        for j, ind in enumerate(top_inds):
-            print("======= Similar question number ", j+1, " ======")
+    print("Loss = ", loss_fn(labels, op))
+    labels = tf.reshape(labels, (batch_size_curr, n+1, -1))[:, :, 0] 
+    sim = similarity(op, dims)
+    sim_inds, _ = rank(op, dims)
+
+    for bi, b in enumerate(batch_inds_curr):
+        print("--------------- Data point ", bi, " ---------------")
+        pos_i = sample_gen.pos_set[b].split()
+        neg_i = sample_gen.neg_set[b].split()
+        for i, ind in enumerate(sim_inds[bi]):
+            if (i >= num_pos):
+                break
             if (ind < len(pos_i)):
-                print("positive")
-                print(question_id[int(pos_i[ind])])
+                print("Rank: ", i+1, " POSITIVE. Similarity: ", sim[bi, ind])
+                # print(question_id[int(pos_i[ind])])
             elif (ind < len(pos_i) + len(neg_i)):
-                print("negative")
-                print(question_id[int(neg_i[ind-len(pos_i)])])
+                print("Rank: ", i+1, "negative. Similarity: ", sim[bi, ind])
+                # print(question_id[int(neg_i[ind-len(pos_i)])])
             else:
-                print("negative")
-                print(question_id[int(neg_i[len(neg_i)-1])])
-        
+                print("Rank: ", i+1, "negative. Similarity: ", sim[bi, ind])
+                # print(question_id[int(neg_i[len(neg_i)-1])])
     
 def main():
-    model_name = 'simple_nn4_short'
+    model_name = 'simple_nn4_short1000'
     model_dir = 'saved_model'
     model_path = os.path.join(model_dir, model_name)
 
@@ -153,6 +153,8 @@ def main():
 
     loaded_data = (word_embed, question_id, model)
 
+
+
     data_folder = 'data_folder/data'
     train_file = 'train_random.txt'
     dev_file = 'dev.txt'
@@ -162,10 +164,18 @@ def main():
     test_path = os.path.join(data_folder, test_file)
     train_path = os.path.join(data_folder, train_file)
 
-    # print(get_metrics(dev_path, dims, loaded_data))
-    print("Training metrics for 100 points: ", get_metrics(train_path, dims, loaded_data, num_data=100))
+    train_q, train_pos, train_neg = read_question_data(train_path)
+    sample_gen_train = SampleGenerator(question_id, train_q, train_pos, \
+            train_neg, dims, word_embed)
+
+    dev_q, dev_pos, dev_neg = read_question_data(dev_path)
+    sample_gen_dev = SampleGenerator(question_id, dev_q, dev_pos, \
+            dev_neg, dims, word_embed)
+
+    # print(get_metrics(dev_path, sample_gen_dev, dims, loaded_data))
+    # print("Training metrics for 1000 points: ", get_metrics(train_path, sample_gen_train, dims, loaded_data, num_data=1000))
     # print("Dev metrics: ", get_metrics(dev_path, dims, loaded_data))
-    verify_samples(train_path, dims, loaded_data, batch_size=10, num_pos=1, randomly=False) 
+    verify_samples(sample_gen_dev, model, dims, batch_size=2, num_pos=1, randomly=False) 
 
     # print(get_mrr(test_path, dims, loaded_data))
 

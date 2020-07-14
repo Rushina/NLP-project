@@ -141,7 +141,7 @@ def fit_model_single_data_point(model, sample_gen, batch_ind, epochs, dims, logg
 def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_data=[]):
     loss_fn = loss_fn_wrap(dims)
     if (num_data == []):
-        num_data = len(train_q)
+        num_data = len(sample_gen.qset)
     num_iter = int(num_data/batch_size)
     for e in range(epochs):
         print("Actual epoch = ", (e+1),"/", (epochs))
@@ -208,7 +208,7 @@ def main():
 
     load_from_checkpoint = False
     train_with_one_datapoint = False 
-    train_with_short_set = True 
+    train_with_short_set =  True
     if (load_from_checkpoint):
         model.load_weights(checkpoint_path)
     else:
@@ -217,17 +217,17 @@ def main():
             batch_ind = 2 
             model = fit_model_single_data_point(model, train_sample_generator, epochs=10, batch_ind = batch_ind, dims=dims, logger=logger)
         else:
-            num_data = 1000 
+            num_data = 10 
             if not train_with_short_set:
                 num_data = []
             model = fit_model(model, train_sample_generator, \
-             batch_size=2, epochs=50, dims=dims, \
-             callbacks=[cp_callback], num_data = num_data)
+             batch_size=10, epochs=30, dims=dims, \
+             callbacks=[], num_data = num_data)
             
 
     # !mkdir -p saved_model
     if not train_with_one_datapoint:
-        model.save('saved_model/simple_nn4_short1000')
+        model.save('saved_model/simple_nn4')
     # post_process('data_folder/data/test.txt', model)
 
 if __name__ == "__main__":
