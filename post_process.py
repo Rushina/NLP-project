@@ -183,7 +183,7 @@ def main():
     data_folder = 'data_folder/data'
     train_file = 'train_random.txt'
     dev_file = 'dev.txt'
-    test_file = 'test.txt'
+    test_file = 'heldout.txt'
 
     dev_path = os.path.join(data_folder, dev_file)
     test_path = os.path.join(data_folder, test_file)

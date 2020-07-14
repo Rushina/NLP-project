@@ -5,6 +5,7 @@ import os
 import pickle
 from sample_generator import SampleGenerator
 import argparse
+import matplotlib.pyplot as plt
 
 class Logger(object):
     def __init__(self, mode='log'):
@@ -38,12 +39,15 @@ def read_question_data(filename):
         qi, posi, negi = [], [], []
         if (len(td.split('\t')) == 3):
             qi, posi, negi = td.split('\t')
+            posi_list = posi.split()
+            for pi in posi_list:
+                q.append(qi)
+                pos.append(pi)
+                neg.append(negi)
         elif (len(td.split('\t')) == 4):
             qi, posi, negi, _ = td.split('\t')
-        posi_list = posi.split()
-        for pi in posi_list:
             q.append(qi)
-            pos.append(pi)
+            pos.append(posi)
             neg.append(negi)
     return (q, pos, neg)
 
@@ -55,7 +59,7 @@ def create_model(dims):
     ip = tf.keras.layers.Input(shape=((n+1), N,wlen)) # query question + sample questions
     avg = tf.keras.layers.Lambda(average)
     l1 = tf.keras.layers.Dense(128, activation='relu')
-    l2 = tf.keras.layers.Dense(opveclen)
+    l2 = tf.keras.layers.Dense(opveclen, activation='relu')
     out = tf.keras.layers.Flatten()
 
     op = out(l2(l1(avg(ip))))
@@ -106,6 +110,7 @@ def fit_model_single_data_point(model, sample_gen, batch_ind, epochs, dims, logg
     loss = 0.25
     k = 0
     
+    loss_over_epochs = []
     batch_inds = [batch_ind]
     data, labels, batch_size_curr, _ = sample_gen.generate_samples(batch_inds)
     print("Labels = ", tf.reshape(labels, (batch_size_curr, 121, -1))[0, :, 0])
@@ -118,6 +123,10 @@ def fit_model_single_data_point(model, sample_gen, batch_ind, epochs, dims, logg
         model.fit(data, labels, batch_size=batch_size_curr, epochs=1)
         op = model.predict(data)
         loss = loss_fn(labels, op)
+        if (loss_over_epochs == []):
+            loss_over_epochs = [loss]
+        else:
+            loss_over_epochs.append(loss)
         k += 1
 
     print("Loss of output: ", loss_fn(labels, op))
@@ -137,13 +146,14 @@ def fit_model_single_data_point(model, sample_gen, batch_ind, epochs, dims, logg
         else:
             print("Rank: ", i+1, "negative. Similarity: ", sim[0, ind])
             # print(question_id[int(neg_i[len(neg_i)-1])])
-    return model 
+    return (model, loss_over_epochs)
 
 def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_data=[]):
     loss_fn = loss_fn_wrap(dims)
     if (num_data == []):
         num_data = len(sample_gen.qset)
     num_iter = int(num_data/batch_size)
+    loss_over_epochs = []
     for e in range(epochs):
         print("Actual epoch = ", (e+1),"/", (epochs))
         inds = range(num_data)
@@ -163,9 +173,13 @@ def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_dat
         sim = similarity(op, dims)
         curr_loss = tf.keras.backend.mean(loss_fn(labels, op))
         print("Current loss = ", curr_loss, " at the end of epoch ", e+1, ".")
+        if (loss_over_epochs == []):
+            loss_over_epochs = [curr_loss]
+        else:
+            loss_over_epochs.append(curr_loss)
         # if ((curr_loss) < 0.05):
         #    return model 
-    return model
+    return (model, loss_over_epochs)
     
 
 def main():
@@ -187,6 +201,9 @@ def main():
     
     parser.add_argument("-cp", "--checkpoint", type=str, \
                         help="-cp or --checkpoint check_point_path to save checkpoints -- relative path")
+
+    parser.add_argument("-pl", "--print_loss", type=str, \
+            help="-pl or --print_loss plot_save_path (str) to save loss vs epochs")
 
     args = parser.parse_args()
     
@@ -225,7 +242,7 @@ def main():
 
     logger.log('Model inputs and outputs')
     loss_fn = loss_fn_wrap(dims)
-    model.compile(optimizer='adam', loss=loss_fn)
+    model.compile(optimizer='SGD', loss=loss_fn)
 
 
     # Training
@@ -239,14 +256,14 @@ def main():
         model.load_weights(train_opts)
     elif train_type=="single":
         batch_ind = int(train_opts)
-        model = fit_model_single_data_point(model, train_sample_generator, epochs=args.epochs, batch_ind = batch_ind, dims=dims, logger=logger)
+        model, loss_over_epochs = fit_model_single_data_point(model, train_sample_generator, epochs=args.epochs, batch_ind = batch_ind, dims=dims, logger=logger)
     elif train_type=="short":
         num_data = int(train_opts) 
-        model = fit_model(model, train_sample_generator, \
+        model, loss_over_epochs = fit_model(model, train_sample_generator, \
          batch_size=args.batch_size, epochs=args.epochs, dims=dims, \
          callbacks=cp_callback, num_data = num_data)
     elif train_type == "full":    
-        model = fit_model(model, train_sample_generator, \
+        model, loss_over_epochs = fit_model(model, train_sample_generator, \
          batch_size=args.batch_size, epochs=args.epochs, dims=dims, \
          callbacks=[], num_data = num_data)
     else:
@@ -255,6 +272,11 @@ def main():
     # !mkdir -p saved_model
     if (args.save_model):
         model.save(args.save_model)
+
+    if (args.print_loss):
+        plt.plot(loss_over_epochs)
+        plt.show()
+        plt.savefig(args.print_loss, format='png')
     # post_process('data_folder/data/test.txt', model)
 
 if __name__ == "__main__":
