@@ -4,6 +4,7 @@ import tensorflow as tf
 import os
 import pickle
 from sample_generator import SampleGenerator
+import argparse
 
 class Logger(object):
     def __init__(self, mode='log'):
@@ -14,16 +15,16 @@ class Logger(object):
             self.mode = 1
         else:
             self.mode = 0
-    def warn(self, str):
+    def warn(self, string):
         if (self.mode < 2):
-            print('WARN: ', str)
+            print('WARN: ', string)
     
-    def log(self, str):
+    def log(self, string):
         if (self.mode < 1):
-            print('Logging: ', str)
+            print('Logging: ', string)
 
-    def error(self, str):
-        print('ERROR: ', str)
+    def error(self, string):
+        print('ERROR: ', string)
 
     
 def read_question_data(filename):
@@ -168,8 +169,33 @@ def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_dat
     
 
 def main():
+
+    # Arguments to main
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-t", "--train_type", type=str, required=True, \
+                        help="Training data set type, options = \
+                        single batch_ind, short num_data, full, load_from_ckp ckp_path")
+    
+    parser.add_argument("-e", "--epochs", type=int, default=20, \
+                        help="-e or --epochs number of epochs (default 20)")
+
+    parser.add_argument("-bs", "--batch_size", type=int, default=10, \
+     help="-bs or --batch_size training batch size (default 10)")
+
+    parser.add_argument("-s", "--save_model", type=str, \
+                        help="-s save_path or --save_model save_path (save_path is relative from current dir)")
+    
+    parser.add_argument("-cp", "--checkpoint", type=str, \
+                        help="-cp or --checkpoint check_point_path to save checkpoints -- relative path")
+
+    args = parser.parse_args()
+    
+    train_type, train_opts = args.train_type.split()
+
+
     logger = Logger('log')
 
+    # Reading in data
     logger.log('Reading in word: to word embedding -- mapping words to vectors...')
     data_folder = "data_folder/created_data"
     f = open(os.path.join(data_folder, "word_embed.pkl"), "rb")
@@ -185,7 +211,8 @@ def main():
     logger.log('Reading in training data -- query question ID, similar questions ID (pos), random questions ID (neg)...')
 
     train_q, train_pos, train_neg = read_question_data('data_folder/data/train_random.txt')
-    
+
+    # Creating model    
     logger.log('Creating Model ...')
 
     n = 120 # number of sample questions per query question
@@ -199,35 +226,35 @@ def main():
     logger.log('Model inputs and outputs')
     loss_fn = loss_fn_wrap(dims)
     model.compile(optimizer='adam', loss=loss_fn)
-    checkpoint_path = "training_1/cp.ckpt"
-    checkpoint_dir = os.path.dirname(checkpoint_path)
 
-    cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
-                                                     save_weights_only=True,
-                                                     verbose=1)
 
-    load_from_checkpoint = False
-    train_with_one_datapoint = False 
-    train_with_short_set =  True
-    if (load_from_checkpoint):
-        model.load_weights(checkpoint_path)
+    # Training
+    cp_callback = []
+    if (args.checkpoint):
+        cp_callback = tf.keras.callbacks.ModelCheckpoint(\
+            filepath=args.checkpoint,verbose=1,save_weights_only=True)
+
+    
+    if (train_type == "load_from_ckp"):
+        model.load_weights(train_opts)
+    elif train_type=="single":
+        batch_ind = int(train_opts)
+        model = fit_model_single_data_point(model, train_sample_generator, epochs=args.epochs, batch_ind = batch_ind, dims=dims, logger=logger)
+    elif train_type=="short":
+        num_data = int(train_opts) 
+        model = fit_model(model, train_sample_generator, \
+         batch_size=args.batch_size, epochs=args.epochs, dims=dims, \
+         callbacks=cp_callback, num_data = num_data)
+    elif train_type == "full":    
+        model = fit_model(model, train_sample_generator, \
+         batch_size=args.batch_size, epochs=args.epochs, dims=dims, \
+         callbacks=[], num_data = num_data)
     else:
-        if train_with_one_datapoint:
-            # batch_ind = random.randrange(len(train_q))
-            batch_ind = 2 
-            model = fit_model_single_data_point(model, train_sample_generator, epochs=10, batch_ind = batch_ind, dims=dims, logger=logger)
-        else:
-            num_data = 10 
-            if not train_with_short_set:
-                num_data = []
-            model = fit_model(model, train_sample_generator, \
-             batch_size=10, epochs=30, dims=dims, \
-             callbacks=[], num_data = num_data)
-            
+        print("Invalid train type entered.")
 
     # !mkdir -p saved_model
-    if not train_with_one_datapoint:
-        model.save('saved_model/simple_nn4')
+    if (args.save_model):
+        model.save(args.save_model)
     # post_process('data_folder/data/test.txt', model)
 
 if __name__ == "__main__":

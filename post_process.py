@@ -5,6 +5,7 @@ from nlp_proj1 import read_question_data, loss_fn_wrap, similarity
 from sample_generator import SampleGenerator
 import pickle
 import random
+import argparse
 
 def rank(y_pred, dims):
     # Takes in an output of size (batch, (n+1)*opvec)
@@ -52,11 +53,9 @@ def map(y_pred, labels, dims):
         map_data += ap/cnt
     return map_data/num_data 
 
-def get_metrics(data_path, sample_gen, dims, loaded_data, metrics = ['mrr', 'pan1', 'pan5', 'map'], num_data=[]):
+def get_metrics(model, sample_gen, dims, metrics = ['mrr', 'pan1', 'pan5', 'map'], num_data=[]):
     n, N, wlen, opveclen = dims
-    word_embed, question_id, model = loaded_data
-    q, pos, neg = read_question_data(data_path)
-    print("Number of data points: ", len(q), len(sample_gen.qset))
+    print("Number of data points: ", len(sample_gen.qset))
     if (num_data == []):
         num_data = len(q)
     res = dict()
@@ -92,7 +91,7 @@ def get_metrics(data_path, sample_gen, dims, loaded_data, metrics = ['mrr', 'pan
     res['pan1'] = prec1_data/cnt_data_points
     res['pan5'] = prec5_data/cnt_data_points
     res['map'] = map_data/cnt_data_points
-    print('This data set has ', total_pos, ' number of positive examples for ', len(q), ' query questions.')
+    print('This data set has ', total_pos, ' number of positive examples for ', num_data, ' query questions.')
     return res
 
 def verify_samples(sample_gen, model, dims, batch_size=10, num_pos=5, randomly=True):
@@ -127,9 +126,35 @@ def verify_samples(sample_gen, model, dims, batch_size=10, num_pos=5, randomly=T
                 # print(question_id[int(neg_i[len(neg_i)-1])])
     
 def main():
-    model_name = 'simple_nn4_short1000'
-    model_dir = 'saved_model'
-    model_path = os.path.join(model_dir, model_name)
+
+    # Arguments
+    parser = argparse.ArgumentParser()
+    
+    parser.add_argument("-d", "--data_set", type=str, required=True, \
+                        choices = ["train", "dev", "test"], \
+                        help="Specify if evaluation to be done on train/dev/test")
+
+    parser.add_argument("-m", "--model", type=str, required=True, \
+                        help="Model path")
+
+    parser.add_argument("-n", "--num_data", type=int, \
+                        help="Number of data points to evaluate")
+
+    parser.add_argument("-po", "--print_outputs", type=str, default="1 1", \
+                        help="-po batch_size num_pos outputs")
+
+    parser.add_argument("-met", "--metrics", type=bool, default=True, \
+                        help="-met (True/False) to print metrics")
+
+    args = parser.parse_args()    
+    model_path = args.model
+    num_data = []
+    if (args.num_data):
+        num_data = args.num_data
+    data_set = args.data_set
+    batch_size, num_pos = args.print_outputs.split()
+    batch_size = int(batch_size)
+    num_pos = int(num_pos)
 
     f = open("data_folder/created_data/word_embed.pkl", "rb") 
     word_embed = pickle.load(f)
@@ -164,20 +189,25 @@ def main():
     test_path = os.path.join(data_folder, test_file)
     train_path = os.path.join(data_folder, train_file)
 
+    sample_gen = dict()
+
     train_q, train_pos, train_neg = read_question_data(train_path)
-    sample_gen_train = SampleGenerator(question_id, train_q, train_pos, \
+    sample_gen["train"] = SampleGenerator(question_id, train_q, train_pos, \
             train_neg, dims, word_embed)
 
     dev_q, dev_pos, dev_neg = read_question_data(dev_path)
-    sample_gen_dev = SampleGenerator(question_id, dev_q, dev_pos, \
+    sample_gen["dev"] = SampleGenerator(question_id, dev_q, dev_pos, \
             dev_neg, dims, word_embed)
 
-    # print(get_metrics(dev_path, sample_gen_dev, dims, loaded_data))
-    # print("Training metrics for 1000 points: ", get_metrics(train_path, sample_gen_train, dims, loaded_data, num_data=1000))
-    # print("Dev metrics: ", get_metrics(dev_path, dims, loaded_data))
-    verify_samples(sample_gen_dev, model, dims, batch_size=2, num_pos=1, randomly=False) 
+    test_q, test_pos, test_neg = read_question_data(test_path)
+    sample_gen["test"] = SampleGenerator(question_id, test_q, test_pos, \
+            test_neg, dims, word_embed)
 
-    # print(get_mrr(test_path, dims, loaded_data))
+    if (args.metrics):
+        print(get_metrics(model, sample_gen[data_set], dims, num_data=num_data)) 
+
+    verify_samples(sample_gen[data_set], model, dims, batch_size=batch_size, num_pos=num_pos, randomly=False) 
+
 
 if __name__ == "__main__":
     main()
