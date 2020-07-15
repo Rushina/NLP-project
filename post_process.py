@@ -56,7 +56,7 @@ def map(y_pred, labels, dims):
 def get_metrics(model, sample_gen, dims, metrics = ['mrr', 'pan1', 'pan5', 'map'], num_data=[]):
     n, N, wlen, opveclen = dims
     if (num_data == []):
-        num_data = len(q)
+        num_data = len(sample_gen.qset)
     res = dict()
     batch_size = min(10, num_data)
     i = 0
@@ -98,11 +98,38 @@ def verify_inputs(sample_gen, dims, batch_ind):
     qset = sample_gen.qset[batch_ind]
     pos_set = sample_gen.pos_set[batch_ind]
     neg_set = sample_gen.neg_set[batch_ind]
+
     # print(pos_set)
     # print(neg_set)
     for i, pos in enumerate(pos_set.split()):
         if (pos in neg_set.split()):
             print(i, pos) 
+    data, labels, batch_size_curr, batch_inds_curr = \
+            sample_gen.generate_samples([batch_ind])
+    labels = tf.reshape(labels, (batch_size_curr, (n+1), -1))[:,:,0]
+
+    q = int(qset)
+    direct = sample_gen.question2vec(sample_gen.question_id[q])
+    from_data = data[0, 0, :, :]
+    print("Question data correct = ", tf.keras.backend.all(direct == from_data))
+    i = 0
+    for pos in pos_set.split():
+        if (i >= n):
+            break
+        direct = sample_gen.question2vec(sample_gen.question_id[int(pos)])
+        from_data = data[0, i+1, :, :]
+        print("Data ", i, " correct = ", tf.keras.backend.all(direct == from_data))
+        print("Label ", i, " correct = ", labels[0, i] == 1.0)
+        i += 1
+    for neg in neg_set.split():
+        if (i >= n):
+            break
+        direct = sample_gen.question2vec(sample_gen.question_id[int(neg)])
+        from_data = data[0, i+1, :, :]
+        print("Data ", i, " correct = ", tf.keras.backend.all(direct == from_data))
+        print("Label ", i, " correct = ", labels[0, i] == 0.0)
+        i += 1
+        
     return
  
 def verify_samples(sample_gen, model, dims, batch_size=10, num_pos=5, randomly=True):
@@ -127,14 +154,17 @@ def verify_samples(sample_gen, model, dims, batch_size=10, num_pos=5, randomly=T
         pos_i = sample_gen.pos_set[b].split()
         neg_i = sample_gen.neg_set[b].split()
         op_i = op[bi, :, :]
+        print("NN output vector = ", op_i[0,:])
 
         for i, ind in enumerate(sim_inds[bi]):
             if (i >= num_pos):
                 break
             if (labels[bi, ind] == 1):
                 print("Rank: ", i+1, " POSITIVE. Similarity: ", sim[bi, ind])
+                print("NN output vector = ", op_i[ind+1, :])
             else:
                 print("Rank: ", i+1, "negative. Similarity: ", sim[bi, ind])
+                print("NN output vector = ", op_i[ind+1, :])
     
 def main():
 
@@ -227,7 +257,7 @@ def main():
         verify_samples(sample_gen[data_set], model, dims, batch_size=batch_size, num_pos=num_pos, randomly=False) 
 
     if (args.verify_input):
-        verify_inputs(sample_gen[data_set], dims, batch_ind=0)
+        verify_inputs(sample_gen[data_set], dims, batch_ind=1)
 
 if __name__ == "__main__":
     main()

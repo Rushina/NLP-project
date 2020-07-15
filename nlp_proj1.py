@@ -63,12 +63,13 @@ def average(x):
 def create_model(dims):
     n, N, wlen, opveclen = dims
     ip = tf.keras.layers.Input(shape=((n+1), N,wlen)) # query question + sample questions
-    avg = tf.keras.layers.Lambda(average)
+
     l1 = tf.keras.layers.Dense(128, activation='tanh')
+    avg = tf.keras.layers.Lambda(average)
     l2 = tf.keras.layers.Dense(opveclen, activation='tanh')
     out = tf.keras.layers.Flatten()
 
-    op = out(l2(l1(avg(ip))))
+    op = out(l2(avg(l1(ip))))
 
     model = tf.keras.models.Model(inputs=ip, outputs=op)
     return model
@@ -192,7 +193,6 @@ def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_dat
         sim = similarity(op, dims)
         curr_loss = tf.keras.backend.mean(loss_fn(labels, op))
         print("Current loss = ", curr_loss, " at the end of epoch ", e+1, ".")
-        print("min similarity = ", tf.keras.backend.min(sim), " max similarity = ", tf.keras.backend.max(sim))
         if (loss_over_epochs == []):
             loss_over_epochs = [curr_loss]
         else:
