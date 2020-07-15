@@ -58,8 +58,8 @@ def create_model(dims):
     n, N, wlen, opveclen = dims
     ip = tf.keras.layers.Input(shape=((n+1), N,wlen)) # query question + sample questions
     avg = tf.keras.layers.Lambda(average)
-    l1 = tf.keras.layers.Dense(128, activation='relu')
-    l2 = tf.keras.layers.Dense(opveclen, activation='relu')
+    l1 = tf.keras.layers.Dense(128, activation='tanh')
+    l2 = tf.keras.layers.Dense(opveclen, activation='tanh')
     out = tf.keras.layers.Flatten()
 
     op = out(l2(l1(avg(ip))))
@@ -78,10 +78,22 @@ def similarity(y_pred, dims):
     s = s2/tf.keras.backend.sqrt(tf.keras.backend.sum(fp*fp, axis = -1))
     return s
 
+def loss_fn_wrap2(dims):
+    def loss_fn(y_true, y_pred):
+        n, N, wlen, opveclen = dims
+        s = similarity(y_pred, dims)
+        delta = 0.25
+        l1 = s - s[:, 0:1]
+        l2 = l1[:, 1:] + delta
+        loss_ = tf.keras.backend.max(l2, axis=-1)
+        return tf.math.maximum(tf.convert_to_tensor(0.0), loss_) 
+    return loss_fn
+
 def loss_fn_wrap(dims):
     def loss_fn(y_true, y_pred):
         n, N, wlen, opveclen = dims
         s = similarity(y_pred, dims)
+
         delta = 0.25
         labels = tf.reshape(y_true, (-1, (n+1), opveclen))[:, :-1, 0]
         diff = list()
@@ -100,13 +112,14 @@ def loss_fn_wrap(dims):
             else:
                 loss.append(l)
         losst = tf.stack(loss, axis=1)
-        ls = tf.keras.backend.max(tf.keras.backend.max(losst, axis=-1), axis=-1)
+        lstemp = tf.keras.backend.max(losst, axis=-1)
+        ls = tf.keras.backend.max(lstemp, axis=-1)
         return ls
     return loss_fn
 
 def fit_model_single_data_point(model, sample_gen, batch_ind, epochs, dims, logger):
     print("Training with a single data point ", batch_ind)
-    loss_fn = loss_fn_wrap(dims)
+    loss_fn = loss_fn_wrap2(dims)
     loss = 0.25
     k = 0
     
@@ -149,7 +162,7 @@ def fit_model_single_data_point(model, sample_gen, batch_ind, epochs, dims, logg
     return (model, loss_over_epochs)
 
 def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_data=[]):
-    loss_fn = loss_fn_wrap(dims)
+    loss_fn = loss_fn_wrap2(dims)
     if (num_data == []):
         num_data = len(sample_gen.qset)
     num_iter = int(num_data/batch_size)
@@ -173,6 +186,7 @@ def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_dat
         sim = similarity(op, dims)
         curr_loss = tf.keras.backend.mean(loss_fn(labels, op))
         print("Current loss = ", curr_loss, " at the end of epoch ", e+1, ".")
+        print("min similarity = ", tf.keras.backend.min(sim), " max similarity = ", tf.keras.backend.max(sim))
         if (loss_over_epochs == []):
             loss_over_epochs = [curr_loss]
         else:
@@ -241,8 +255,8 @@ def main():
     train_sample_generator = SampleGenerator(question_id, train_q, train_pos, train_neg, dims, word_embed)
 
     logger.log('Model inputs and outputs')
-    loss_fn = loss_fn_wrap(dims)
-    model.compile(optimizer='SGD', loss=loss_fn)
+    loss_fn = loss_fn_wrap2(dims)
+    model.compile(optimizer='adam', loss=loss_fn)
 
 
     # Training
