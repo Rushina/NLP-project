@@ -45,9 +45,15 @@ def read_question_data(filename):
                 pos.append(pi)
                 neg.append(negi)
         elif (len(td.split('\t')) == 4):
-            qi, posi, negi, _ = td.split('\t')
+            qi, posi, alli, _ = td.split('\t')
             q.append(qi)
             pos.append(posi)
+            posi_list = posi.split()
+            alli_list = alli.split()
+            negi_list = [x for x in alli_list if x not in posi_list]
+            negi = " ".join(negi_list)
+            # print("Negative example list: ")
+            # print(negi, len(negi.split()))
             neg.append(negi)
     return (q, pos, neg)
 

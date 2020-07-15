@@ -47,19 +47,18 @@ def map(y_pred, labels, dims):
         cnt = 0
         ap = 0.0
         for j, aj in enumerate(a):
-            if (labels[i, j]):
-                ap += np.sum(labels[i,a[0]:aj+1])/(j+1)
+            if (labels[i, aj]):
+                ap += float(np.sum(labels[i,a[0:j+1]]))/(j+1)
                 cnt += 1
-        map_data += ap/cnt
+        map_data += float(ap)/cnt
     return map_data/num_data 
 
 def get_metrics(model, sample_gen, dims, metrics = ['mrr', 'pan1', 'pan5', 'map'], num_data=[]):
     n, N, wlen, opveclen = dims
-    print("Number of data points: ", len(sample_gen.qset))
     if (num_data == []):
         num_data = len(q)
     res = dict()
-    batch_size = min(10, num_data-1)
+    batch_size = min(10, num_data)
     i = 0
     mrr_data = 0.0
     prec1_data = 0.0
@@ -67,7 +66,7 @@ def get_metrics(model, sample_gen, dims, metrics = ['mrr', 'pan1', 'pan5', 'map'
     total_pos = 0
     map_data = 0.0
     cnt_data_points = 0
-    while (i < num_data-batch_size):
+    while (i < num_data-batch_size+1):
         print('Analyzing data points ', i, ' through ', i+batch_size, '...')
         data, labels, batch_size_curr, _ = sample_gen.generate_samples( \
          range(i, i + batch_size))
@@ -94,6 +93,18 @@ def get_metrics(model, sample_gen, dims, metrics = ['mrr', 'pan1', 'pan5', 'map'
     print('This data set has ', total_pos, ' number of positive examples for ', num_data, ' query questions.')
     return res
 
+def verify_inputs(sample_gen, dims, batch_ind):
+    n, N, wlen, opveclen = dims
+    qset = sample_gen.qset[batch_ind]
+    pos_set = sample_gen.pos_set[batch_ind]
+    neg_set = sample_gen.neg_set[batch_ind]
+    # print(pos_set)
+    # print(neg_set)
+    for i, pos in enumerate(pos_set.split()):
+        if (pos in neg_set.split()):
+            print(i, pos) 
+    return
+ 
 def verify_samples(sample_gen, model, dims, batch_size=10, num_pos=5, randomly=True):
     n, N, wlen, opveclen = dims
     loss_fn = loss_fn_wrap(dims)
@@ -102,28 +113,28 @@ def verify_samples(sample_gen, model, dims, batch_size=10, num_pos=5, randomly=T
         batch_inds = range(batch_size)
     data, labels, batch_size_curr, batch_inds_curr = \
             sample_gen.generate_samples(batch_inds)
+
     op = model.predict(data)
     print("Loss = ", loss_fn(labels, op))
-    labels = tf.reshape(labels, (batch_size_curr, n+1, -1))[:, :, 0] 
     sim = similarity(op, dims)
     sim_inds, _ = rank(op, dims)
+
+    op = tf.reshape(op, (batch_size_curr, n+1, -1))
+    labels = tf.reshape(labels, (batch_size_curr, n+1, -1))[:, :, 0] 
 
     for bi, b in enumerate(batch_inds_curr):
         print("--------------- Data point ", bi, " ---------------")
         pos_i = sample_gen.pos_set[b].split()
         neg_i = sample_gen.neg_set[b].split()
+        op_i = op[bi, :, :]
+
         for i, ind in enumerate(sim_inds[bi]):
             if (i >= num_pos):
                 break
-            if (ind < len(pos_i)):
+            if (labels[bi, ind] == 1):
                 print("Rank: ", i+1, " POSITIVE. Similarity: ", sim[bi, ind])
-                # print(question_id[int(pos_i[ind])])
-            elif (ind < len(pos_i) + len(neg_i)):
-                print("Rank: ", i+1, "negative. Similarity: ", sim[bi, ind])
-                # print(question_id[int(neg_i[ind-len(pos_i)])])
             else:
                 print("Rank: ", i+1, "negative. Similarity: ", sim[bi, ind])
-                # print(question_id[int(neg_i[len(neg_i)-1])])
     
 def main():
 
@@ -143,7 +154,13 @@ def main():
     parser.add_argument("-po", "--print_outputs", type=str, default="1 1", \
                         help="-po batch_size num_pos outputs")
 
-    parser.add_argument("-met", "--metrics", type=bool, default=True, \
+    parser.add_argument("-met", "--metrics", action='store_false', \
+                        help="-met (True/False) to print metrics")
+
+    parser.add_argument("-ver_s", "--verify_samples", action='store_false', \
+                        help="-met (True/False) to print metrics")
+
+    parser.add_argument("-ver_i", "--verify_input", action='store_false', \
                         help="-met (True/False) to print metrics")
 
     args = parser.parse_args()    
@@ -206,8 +223,11 @@ def main():
     if (args.metrics):
         print(get_metrics(model, sample_gen[data_set], dims, num_data=num_data)) 
 
-    verify_samples(sample_gen[data_set], model, dims, batch_size=batch_size, num_pos=num_pos, randomly=False) 
+    if (args.verify_samples):
+        verify_samples(sample_gen[data_set], model, dims, batch_size=batch_size, num_pos=num_pos, randomly=False) 
 
+    if (args.verify_input):
+        verify_inputs(sample_gen[data_set], dims, batch_ind=0)
 
 if __name__ == "__main__":
     main()

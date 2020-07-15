@@ -58,21 +58,26 @@ class SampleGenerator(object):
             q = self.qset[i] 
             j = 0
             ques[r, :, :] = self.question2vec(self.question_id[int(q)])
-            for pos in self.pos_set[i].split():
+            pos_list = self.pos_set[i].split()
+            neg_list = self.neg_set[i].split()
+
+            if(len(pos_list) == 0 or len(neg_list) == 0):
+                # logger.warn('No positive or no negative examples detected for example ' + str(i))
+                if not_batch_inds:
+                    not_batch_inds.append(i)
+                else:
+                    not_batch_inds = [i]
+                continue
+
+            for pos in pos_list:
                 p = int(pos)
                 samples[r, j, :, :] = self.question2vec(self.question_id[int(p)])
                 labels[r, j, :] = 1
                 j += 1
                 if (j >= n):
                     break
-            if(j == 0):
-                # logger.warn('No positive examples detected for example ' + str(i))
-                if not_batch_inds:
-                    not_batch_inds.append(i)
-                else:
-                    not_batch_inds = [i]
-                continue
-            for neg in self.neg_set[i].split():
+
+            for neg in neg_list:
                 if (j >= n):
                     break
                 ns = int(neg)
