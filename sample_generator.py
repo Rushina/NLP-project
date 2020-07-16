@@ -61,7 +61,7 @@ class SampleGenerator(object):
             pos_list = self.pos_set[i].split()
             neg_list = self.neg_set[i].split()
 
-            if(len(pos_list) == 0 or len(neg_list) == 0):
+            if(len(pos_list) == 0):
                 # logger.warn('No positive or no negative examples detected for example ' + str(i))
                 if not_batch_inds:
                     not_batch_inds.append(i)
@@ -84,9 +84,14 @@ class SampleGenerator(object):
                 samples[r, j, :, :] = self.question2vec(self.question_id[int(ns)])
                 labels[r, j, :] = 0
                 j += 1
+            if (len(neg_list)==0):
+                ns = p
+                extra_label = 1.0
+            else:
+                extra_label = 0
             while (j < n):
                 samples[r, j, :, :] = self.question2vec(self.question_id[int(ns)])
-                labels[r, j, :] = 0
+                labels[r, j, :] = extra_label 
                 j += 1
             r += 1
         batch_size = r
