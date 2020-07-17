@@ -60,6 +60,14 @@ def read_question_data(filename):
 def average(x):
     return tf.keras.backend.mean(x, axis=-2)
 
+def print_model_weights(model, layers = [1]):
+    for i in layers:
+        layer = model.layers[i]
+        print("Layer number ", i, " type : ", layer.__class__.__name__)
+        w, b = layer.get_weights()
+        print("Weights: ", w)
+        # print("Biases: ", b)
+ 
 def create_model(dims):
     n, N, wlen, opveclen = dims
     ip = tf.keras.layers.Input(shape=((n+1), N,wlen)) # query question + sample questions
@@ -148,6 +156,7 @@ def fit_model_single_data_point(model, sample_gen, batch_ind, epochs, dims, logg
         else:
             loss_over_epochs.append(loss)
         k += 1
+        print_model_weights(model) 
 
     print("Loss of output: ", loss_fn(labels, op))
     sim = np.array(similarity(op, dims))
