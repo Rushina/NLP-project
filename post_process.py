@@ -90,7 +90,7 @@ def get_metrics(model, sample_gen, dims, metrics = ['mrr', 'pan1', 'pan5', 'map'
     res['pan1'] = prec1_data/cnt_data_points
     res['pan5'] = prec5_data/cnt_data_points
     res['map'] = map_data/cnt_data_points
-    print('This data set has ', total_pos, ' number of positive examples for ', num_data, ' query questions.')
+    print('This data set has ', total_pos, ' number of positive examples for ',cnt_data_points , ' query questions.')
     return res
 
 def verify_inputs(sample_gen, dims, batch_ind):
@@ -154,17 +154,27 @@ def verify_samples(sample_gen, model, dims, batch_size=10, num_pos=5, randomly=T
         pos_i = sample_gen.pos_set[b].split()
         neg_i = sample_gen.neg_set[b].split()
         op_i = op[bi, :, :]
-        print("NN output vector = ", op_i[0,:])
 
+        print("Question : ")
+        print(sample_gen.question_id[int(sample_gen.qset[b])])
         for i, ind in enumerate(sim_inds[bi]):
             if (i >= num_pos):
                 break
             if (labels[bi, ind] == 1):
                 print("Rank: ", i+1, " POSITIVE. Similarity: ", sim[bi, ind])
-                print("NN output vector = ", op_i[ind+1, :])
+                print("Positive Question : ")
+                if (ind < len(pos_i)):
+                    print(sample_gen.question_id[int(pos_i[ind])])
+                else:
+                    print(sample_gen.question_id[int(pos_i[-1])])
+                    
             else:
                 print("Rank: ", i+1, "negative. Similarity: ", sim[bi, ind])
-                print("NN output vector = ", op_i[ind+1, :])
+                print("Negative Question : ")
+                if (ind < len(pos_i) + len(neg_i)):
+                    print(sample_gen.question_id[int(neg_i[ind-len(pos_i)])])
+                else:
+                    print(sample_gen.question_id[int(neg_i[-1])])
     
 def main():
 
@@ -213,7 +223,7 @@ def main():
 
     n = 120
     N = 100
-    opveclen = 30
+    opveclen = 100 
     wlen = len(word_embed['the'])
     dims = n, N, wlen, opveclen
     loss_fn = loss_fn_wrap(dims)

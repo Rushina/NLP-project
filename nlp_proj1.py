@@ -72,12 +72,13 @@ def create_model(dims):
     n, N, wlen, opveclen = dims
     ip = tf.keras.layers.Input(shape=((n+1), N,wlen)) # query question + sample questions
 
-    l1 = tf.keras.layers.Dense(128, activation='tanh')
+    l1 = tf.keras.layers.Dense(150, activation='tanh')
+    l2 = tf.keras.layers.Dense(300, activation='tanh') 
     avg = tf.keras.layers.Lambda(average)
-    l2 = tf.keras.layers.Dense(opveclen, activation='tanh')
+    l3 = tf.keras.layers.Dense(opveclen, activation='tanh')
     out = tf.keras.layers.Flatten()
 
-    op = out(l2(avg(l1(ip))))
+    op = out(l3(avg(l2(l1(ip)))))
 
     model = tf.keras.models.Model(inputs=ip, outputs=op)
     return model
@@ -179,6 +180,7 @@ def fit_model_single_data_point(model, sample_gen, batch_ind, epochs, dims, logg
 
 def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_data=[]):
     loss_fn = loss_fn_wrap2(dims)
+    loss_fn_orig = loss_fn_wrap(dims)
     if (num_data == []):
         num_data = len(sample_gen.qset)
     num_iter = int(num_data/batch_size)
@@ -200,8 +202,9 @@ def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_dat
              epochs=1, callbacks=callbacks, verbose=0)
         op = model.predict(data)
         sim = similarity(op, dims)
-        curr_loss = tf.keras.backend.mean(loss_fn(labels, op))
-        print("Current loss = ", curr_loss, " at the end of epoch ", e+1, ".")
+        curr_loss = np.asscalar(np.array(tf.keras.backend.mean(loss_fn(labels, op))))
+        curr_loss_test = np.asscalar(np.array(tf.keras.backend.mean(loss_fn_orig(labels, op))))
+        print("Current loss = ", curr_loss, " ( ", curr_loss_test,  " )at the end of epoch ", e+1, ".")
         if (loss_over_epochs == []):
             loss_over_epochs = [curr_loss]
         else:
@@ -235,8 +238,12 @@ def main():
             help="-pl or --print_loss plot_save_path (str) to save loss vs epochs")
 
     args = parser.parse_args()
+    train_type, train_opts = " ", " "
     
-    train_type, train_opts = args.train_type.split()
+    if (len(args.train_type.split()) == 2):
+        train_type, train_opts = args.train_type.split()
+    else:
+        train_type = args.train_type.split()[0]
 
 
     logger = Logger('log')
@@ -263,7 +270,7 @@ def main():
 
     n = 120 # number of sample questions per query question
     N = 100 # number of words per question
-    opveclen = 30
+    opveclen = 100
     wlen = len(word_embed['the'])
     dims = n, N, wlen, opveclen 
     model = create_model(dims)
@@ -283,6 +290,7 @@ def main():
     
     if (train_type == "load_from_ckp"):
         model.load_weights(train_opts)
+        print("Model loaded")
     elif train_type=="single":
         batch_ind = int(train_opts)
         model, loss_over_epochs = fit_model_single_data_point(model, train_sample_generator, epochs=args.epochs, batch_ind = batch_ind, dims=dims, logger=logger)
@@ -294,7 +302,7 @@ def main():
     elif train_type == "full":    
         model, loss_over_epochs = fit_model(model, train_sample_generator, \
          batch_size=args.batch_size, epochs=args.epochs, dims=dims, \
-         callbacks=[], num_data = num_data)
+         callbacks=cp_callback)
     else:
         print("Invalid train type entered.")
 
