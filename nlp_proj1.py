@@ -207,7 +207,7 @@ def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_dat
             epoch_loss += curr_loss
         epoch_loss /= k
         print("Current loss = ", epoch_loss, "at the end of epoch ", e+1, ".")
-    if (loss_over_epochs == []):
+        if (loss_over_epochs == []):
             loss_over_epochs = [curr_loss]
         else:
             loss_over_epochs.append(curr_loss)
@@ -292,7 +292,7 @@ def main():
     cp_callback = []
     if (args.checkpoint):
         cp_callback = tf.keras.callbacks.ModelCheckpoint(\
-            filepath=args.checkpoint,verbose=1,save_weights_only=True)
+            filepath=args.checkpoint,verbose=0,save_weights_only=True)
 
     
     if (train_type == "load_from_ckp"):
