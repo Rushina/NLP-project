@@ -60,7 +60,7 @@ def read_question_data(filename):
 def average(x):
     return tf.keras.backend.mean(x, axis=-2)
 
-def print_model_weights(model, layers = [1]):
+def print_model_weights(model, layers = [4]):
     for i in layers:
         layer = model.layers[i]
         print("Layer number ", i, " type : ", layer.__class__.__name__)
@@ -188,6 +188,7 @@ def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_dat
     for e in range(epochs):
         print("Actual epoch = ", (e+1),"/", (epochs))
         inds = range(num_data)
+        epoch_loss = 0.0
         for k in range(num_iter):
             batch_inds = [] 
             if (len(inds) >= batch_size):
@@ -200,12 +201,13 @@ def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_dat
             data, labels, batch_size_curr, _ = sample_gen.generate_samples(batch_inds)
             model.fit(data, labels, batch_size=batch_size_curr, \
              epochs=1, callbacks=callbacks, verbose=0)
-        op = model.predict(data)
-        sim = similarity(op, dims)
-        curr_loss = np.asscalar(np.array(tf.keras.backend.mean(loss_fn(labels, op))))
-        curr_loss_test = np.asscalar(np.array(tf.keras.backend.mean(loss_fn_orig(labels, op))))
-        print("Current loss = ", curr_loss, " ( ", curr_loss_test,  " )at the end of epoch ", e+1, ".")
-        if (loss_over_epochs == []):
+            op = model.predict(data)
+            sim = similarity(op, dims)
+            curr_loss = np.asscalar(np.array(tf.keras.backend.mean(loss_fn(labels, op))))
+            epoch_loss += curr_loss
+        epoch_loss /= k
+        print("Current loss = ", epoch_loss, "at the end of epoch ", e+1, ".")
+    if (loss_over_epochs == []):
             loss_over_epochs = [curr_loss]
         else:
             loss_over_epochs.append(curr_loss)
@@ -236,6 +238,9 @@ def main():
 
     parser.add_argument("-pl", "--print_loss", type=str, \
             help="-pl or --print_loss plot_save_path (str) to save loss vs epochs")
+
+    parser.add_argument("-load", type=str, \
+            help="-load ckp_path (str) to load model from checkpoint before training")
 
     args = parser.parse_args()
     train_type, train_opts = " ", " "
@@ -279,6 +284,8 @@ def main():
     logger.log('Model inputs and outputs')
     loss_fn = loss_fn_wrap2(dims)
     model.compile(optimizer='adam', loss=loss_fn)
+    if (args.load):
+        model.load_weights(args.load)
 
 
     # Training
