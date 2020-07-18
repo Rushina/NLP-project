@@ -98,7 +98,7 @@ def loss_fn_wrap2(dims):
     def loss_fn(y_true, y_pred):
         n, N, wlen, opveclen = dims
         s = similarity(y_pred, dims)
-        delta = 0.25
+        delta = 1.0
         l1 = s - s[:, 0:1]
         l2 = l1[:, 1:] + delta
         loss_ = tf.keras.backend.max(l2, axis=-1)
@@ -110,7 +110,7 @@ def loss_fn_wrap(dims):
         n, N, wlen, opveclen = dims
         s = similarity(y_pred, dims)
 
-        delta = 0.25
+        delta = 1.0
         labels = tf.reshape(y_true, (-1, (n+1), opveclen))[:, :-1, 0]
         diff = list()
         for i in range(s.shape[1]):
