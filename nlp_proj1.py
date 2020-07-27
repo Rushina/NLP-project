@@ -45,6 +45,16 @@ def read_question_data(filename):
                 pos.append(pi)
                 neg.append(negi)
         elif (len(td.split('\t')) == 4):
+            qi, posi, alli,_ = td.split('\t')
+            posi_list = posi.split()
+            alli_list = alli.split()
+            negi_list = [x for x in alli_list if x not in posi_list]
+            negi = " ".join(negi_list)
+            for pi in posi_list:
+                q.append(qi)
+                pos.append(pi)
+                neg.append(negi)
+        else:
             qi, posi, alli, _ = td.split('\t')
             q.append(qi)
             pos.append(posi)
@@ -110,7 +120,7 @@ def loss_fn_wrap(dims):
         n, N, wlen, opveclen = dims
         s = similarity(y_pred, dims)
 
-        delta = 1.0
+        delta = 1.0 
         labels = tf.reshape(y_true, (-1, (n+1), opveclen))[:, :-1, 0]
         diff = list()
         for i in range(s.shape[1]):
