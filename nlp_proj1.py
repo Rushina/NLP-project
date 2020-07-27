@@ -57,6 +57,7 @@ def read_question_data(filename):
                 pos.append(pi)
                 neg.append(negi)
         else:
+            continue
             qi, posi, alli, _ = td.split('\t')
             q.append(qi)
             pos.append(posi)
