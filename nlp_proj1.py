@@ -108,12 +108,18 @@ def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, check
         num_data = len(sample_gen.qset)
     num_iter = int(num_data/batch_size)
     loss_over_epochs = []
+    if not (checkpoint_path == 0):
+        if not (os.path.exists(checkpoint_path)):
+            os.makedirs(checkpoint_path)
+        elabel = 0
+        while (os.path.exists(os.path.join(checkpoint_path, "e"+str(elabel)))):
+            elabel += 1
     for e in range(epochs):
         print("Actual epoch = ", (e+1),"/", (epochs))
         inds = range(num_data)
         epoch_loss = 0.0
-        if not (checkpoint_path == 0):
-            cp_path = checkpoint_path + "_epoch" + str(e)
+        if not checkpoint_path == 0:
+            cp_path = os.path.join(checkpoint_path, "e"+str(elabel))
             cp_callback = tf.keras.callbacks.ModelCheckpoint(\
                 filepath=cp_path,verbose=0,save_weights_only=True)
         else:
@@ -138,6 +144,7 @@ def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, check
         print("Current loss = ", epoch_loss, "at the end of epoch ", e+1, ".")
         print("Dev metrics = ", get_metrics(model, dev_sample_gen, dims, verbose=False), \
             " at the end of epoch ", e+1, ".")
+        elabel += 1
         if (loss_over_epochs == []):
             loss_over_epochs = [curr_loss]
         else:
