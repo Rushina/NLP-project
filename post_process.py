@@ -1,8 +1,9 @@
 import tensorflow as tf
 import numpy as np
 import os
-from nlp_proj1 import read_question_data, loss_fn_wrap, similarity
+from loss_function import loss_fn_wrap, similarity
 from sample_generator import SampleGenerator
+from read_question_data import read_question_data
 import pickle
 import random
 import argparse
@@ -53,7 +54,7 @@ def map(y_pred, labels, dims):
         map_data += float(ap)/cnt
     return map_data/num_data 
 
-def get_metrics(model, sample_gen, dims, metrics = ['mrr', 'pan1', 'pan5', 'map'], num_data=[]):
+def get_metrics(model, sample_gen, dims, metrics = ['mrr', 'pan1', 'pan5', 'map'], num_data=[], verbose=True):
     n, N, wlen, opveclen = dims
     if (num_data == []):
         num_data = len(sample_gen.qset)
@@ -67,7 +68,8 @@ def get_metrics(model, sample_gen, dims, metrics = ['mrr', 'pan1', 'pan5', 'map'
     map_data = 0.0
     cnt_data_points = 0
     while (i < num_data-batch_size+1):
-        print('Analyzing data points ', i, ' through ', i+batch_size, '...')
+        if (verbose):
+            print('Analyzing data points ', i, ' through ', i+batch_size, '...')
         data, labels, batch_size_curr, _ = sample_gen.generate_samples( \
          range(i, i + batch_size))
         labels = np.reshape(labels, (-1, (n+1), opveclen))[:, :-1, 0]
@@ -90,7 +92,7 @@ def get_metrics(model, sample_gen, dims, metrics = ['mrr', 'pan1', 'pan5', 'map'
     res['pan1'] = prec1_data/cnt_data_points
     res['pan5'] = prec5_data/cnt_data_points
     res['map'] = map_data/cnt_data_points
-    print('This data set has ', total_pos, ' number of positive examples for ',cnt_data_points , ' query questions.')
+    # print('This data set has ', total_pos, ' number of positive examples for ',cnt_data_points , ' query questions.')
     return res
 
 def verify_inputs(sample_gen, dims, batch_ind):
