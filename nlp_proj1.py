@@ -49,6 +49,8 @@ def read_question_data(filename):
             posi_list = posi.split()
             alli_list = alli.split()
             negi_list = [x for x in alli_list if x not in posi_list]
+            if (len(negi_list) == 0):
+                continue
             negi = " ".join(negi_list)
             for pi in posi_list:
                 q.append(qi)
