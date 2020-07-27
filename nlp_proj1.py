@@ -135,7 +135,7 @@ def loss_fn_wrap(dims):
 
 def fit_model_single_data_point(model, sample_gen, batch_ind, epochs, dims, logger):
     print("Training with a single data point ", batch_ind)
-    loss_fn = loss_fn_wrap2(dims)
+    loss_fn = loss_fn_wrap(dims)
     loss = 0.25
     k = 0
     
@@ -179,7 +179,7 @@ def fit_model_single_data_point(model, sample_gen, batch_ind, epochs, dims, logg
     return (model, loss_over_epochs)
 
 def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_data=[]):
-    loss_fn = loss_fn_wrap2(dims)
+    loss_fn = loss_fn_wrap(dims)
     loss_fn_orig = loss_fn_wrap(dims)
     if (num_data == []):
         num_data = len(sample_gen.qset)
@@ -205,7 +205,7 @@ def fit_model(model, sample_gen, batch_size, epochs, dims, callbacks=[], num_dat
             sim = similarity(op, dims)
             curr_loss = np.asscalar(np.array(tf.keras.backend.mean(loss_fn(labels, op))))
             epoch_loss += curr_loss
-        epoch_loss /= k
+        epoch_loss /= (k+1)
         print("Current loss = ", epoch_loss, "at the end of epoch ", e+1, ".")
         if (loss_over_epochs == []):
             loss_over_epochs = [curr_loss]
@@ -268,7 +268,7 @@ def main():
 
     logger.log('Reading in training data -- query question ID, similar questions ID (pos), random questions ID (neg)...')
 
-    train_q, train_pos, train_neg = read_question_data('data_folder/data/train_random.txt')
+    train_q, train_pos, train_neg = read_question_data('data_folder/data/dev.txt')
 
     # Creating model    
     logger.log('Creating Model ...')
@@ -282,7 +282,7 @@ def main():
     train_sample_generator = SampleGenerator(question_id, train_q, train_pos, train_neg, dims, word_embed)
 
     logger.log('Model inputs and outputs')
-    loss_fn = loss_fn_wrap2(dims)
+    loss_fn = loss_fn_wrap(dims)
     model.compile(optimizer='adam', loss=loss_fn)
     if (args.load):
         model.load_weights(args.load)
