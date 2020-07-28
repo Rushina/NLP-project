@@ -9,6 +9,8 @@ from post_process import get_metrics
 from sample_generator import SampleGenerator
 from loss_function import similarity, loss_fn_wrap, loss_fn_wrap2
 from read_question_data import read_question_data
+from tqdm import tqdm
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 class Logger(object):
     def __init__(self, mode='log'):
@@ -108,11 +110,11 @@ def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, check
         num_data = len(sample_gen.qset)
     num_iter = int(num_data/batch_size)
     loss_over_epochs = []
+    elabel = 0
     if not (checkpoint_path == 0):
         if not (os.path.exists(checkpoint_path)):
             os.makedirs(checkpoint_path)
-        elabel = 0
-        while (os.path.exists(os.path.join(checkpoint_path, "e"+str(elabel)))):
+        while (os.path.exists(os.path.join(checkpoint_path, "e"+str(elabel)+".index"))):
             elabel += 1
     for e in range(epochs):
         print("Actual epoch = ", (e+1),"/", (epochs))
@@ -124,7 +126,7 @@ def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, check
                 filepath=cp_path,verbose=0,save_weights_only=True)
         else:
             cp_callback = []
-        for k in range(num_iter):
+        for k in tqdm(range(num_iter)):
             batch_inds = [] 
             if (len(inds) >= batch_size):
                 batch_inds = random.sample(inds, batch_size)
@@ -133,7 +135,8 @@ def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, check
             else:
                 batch_inds = inds
             inds = [x for x in inds if x not in batch_inds]
-            data, labels, batch_size_curr, _ = sample_gen.generate_samples(batch_inds)
+            with tf.device('/CPU:0'):
+                data, labels, batch_size_curr, _ = sample_gen.generate_samples(batch_inds)
             model.fit(data, labels, batch_size=batch_size_curr, \
              epochs=1, callbacks=cp_callback, verbose=0)
             op = model.predict(data)
@@ -141,7 +144,7 @@ def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, check
             curr_loss = np.asscalar(np.array(tf.keras.backend.mean(loss_fn(labels, op))))
             epoch_loss += curr_loss
         epoch_loss /= (k+1)
-        print("Current loss = ", epoch_loss, "at the end of epoch ", e+1, ".")
+        print("Current loss = ", epoch_loss, "at the end of epoch ", e+1, ", saved as epoch: ", elabel)
         print("Dev metrics = ", get_metrics(model, dev_sample_gen, dims, verbose=False), \
             " at the end of epoch ", e+1, ".")
         elabel += 1
@@ -156,6 +159,7 @@ def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, check
 
 def main():
 
+    tf.debugging.set_log_device_placement(True)
     # Arguments to main
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--train_type", type=str, required=True, \

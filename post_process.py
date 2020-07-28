@@ -7,6 +7,7 @@ from read_question_data import read_question_data
 import pickle
 import random
 import argparse
+from tqdm import tqdm
 
 def rank(y_pred, dims):
     # Takes in an output of size (batch, (n+1)*opvec)
@@ -67,6 +68,7 @@ def get_metrics(model, sample_gen, dims, metrics = ['mrr', 'pan1', 'pan5', 'map'
     total_pos = 0
     map_data = 0.0
     cnt_data_points = 0
+    pbar = tqdm(total = num_data - batch_size + 2)
     while (i < num_data-batch_size+1):
         if (verbose):
             print('Analyzing data points ', i, ' through ', i+batch_size, '...')
@@ -86,8 +88,10 @@ def get_metrics(model, sample_gen, dims, metrics = ['mrr', 'pan1', 'pan5', 'map'
                 prec5_data += precision_at_k(op, labels, dims, 5)*batch_size_curr
             if ('map' in metrics):
                 map_data += map(op, labels, dims)*batch_size_curr
+        pbar.update(1)
         i += batch_size
         cnt_data_points += batch_size_curr
+    pbar.close()
     res['mrr'] = mrr_data/cnt_data_points
     res['pan1'] = prec1_data/cnt_data_points
     res['pan5'] = prec5_data/cnt_data_points
