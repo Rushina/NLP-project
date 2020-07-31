@@ -88,7 +88,7 @@ def get_metrics(model, sample_gen, dims, metrics = ['mrr', 'pan1', 'pan5', 'map'
                 prec5_data += precision_at_k(op, labels, dims, 5)*batch_size_curr
             if ('map' in metrics):
                 map_data += map(op, labels, dims)*batch_size_curr
-        pbar.update(1)
+        pbar.update(batch_size)
         i += batch_size
         cnt_data_points += batch_size_curr
     pbar.close()
