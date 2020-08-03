@@ -6,7 +6,7 @@ import pickle
 import argparse
 import matplotlib.pyplot as plt
 from post_process import get_metrics
-from sample_generator import SampleGenerator
+from sample_generator import SampleGenerator, DataStore
 from loss_function import similarity, loss_fn_wrap, loss_fn_wrap2
 from read_question_data import read_question_data
 from tqdm import tqdm
@@ -43,9 +43,14 @@ def print_model_weights(model, layers = [4]):
         print("Weights: ", w)
         # print("Biases: ", b)
  
-def create_model(dims):
+def create_model(dims, embedding_matrix):
     n, N, wlen, opveclen = dims
-    ip = tf.keras.layers.Input(shape=((n+1), N,wlen)) # query question + sample questions
+    vocab_len, _ = embedding_matrix.shape
+    ip = tf.keras.layers.Input(shape=((n+1), N)) # query question + sample questions
+    flat1 = tf.keras.layers.Flatten()
+
+    embedding_layer = tf.keras.layers.Embedding(input_dim=vocab_len, output_dim=wlen, weights=[embedding_matrix], trainable=False, input_length=(n+1)*N)
+    unflat1 = tf.keras.layers.Reshape((n+1, N, wlen)) 
 
     l1 = tf.keras.layers.Dense(150, activation='tanh')
     l2 = tf.keras.layers.Dense(300, activation='tanh') 
@@ -53,7 +58,7 @@ def create_model(dims):
     l3 = tf.keras.layers.Dense(opveclen, activation='tanh')
     out = tf.keras.layers.Flatten()
 
-    op = out(l3(avg(l2(l1(ip)))))
+    op = out(l3(avg(l2(l1(unflat1(embedding_layer(flat1(ip))))))))
 
     model = tf.keras.models.Model(inputs=ip, outputs=op)
     return model
@@ -216,14 +221,18 @@ def main():
     # Creating model    
     logger.log('Creating Model ...')
 
+    data_obj = DataStore(question_id, word_embed)
+
     n = 120 # number of sample questions per query question
     N = 100 # number of words per question
     opveclen = 100
     wlen = len(word_embed['the'])
     dims = n, N, wlen, opveclen 
-    model = create_model(dims)
-    train_sample_generator = SampleGenerator(question_id, train_q, train_pos, train_neg, dims, word_embed)
-    dev_sample_generator = SampleGenerator(question_id, dev_q, dev_pos, dev_neg, dims, word_embed)
+    model = create_model(dims, data_obj.embedding_matrix)
+
+
+    train_sample_generator = SampleGenerator(train_q, train_pos, train_neg, dims, data_obj)
+    dev_sample_generator = SampleGenerator(dev_q, dev_pos, dev_neg, dims, data_obj)
 
     logger.log('Model inputs and outputs')
     loss_fn = loss_fn_wrap2(dims)
