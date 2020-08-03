@@ -6,7 +6,7 @@ import pickle
 import argparse
 import matplotlib.pyplot as plt
 from post_process import get_metrics
-from sample_generator import SampleGenerator
+from sample_generator import SampleGenerator, DataStore
 from loss_function import similarity, loss_fn_wrap, loss_fn_wrap2
 from read_question_data import read_question_data
 from tqdm import tqdm
@@ -43,9 +43,14 @@ def print_model_weights(model, layers = [4]):
         print("Weights: ", w)
         # print("Biases: ", b)
  
-def create_model(dims):
+def create_model(dims, embedding_matrix):
     n, N, wlen, opveclen = dims
-    ip = tf.keras.layers.Input(shape=((n+1), N,wlen)) # query question + sample questions
+    vocab_len, _ = embedding_matrix.shape
+    ip = tf.keras.layers.Input(shape=((n+1), N)) # query question + sample questions
+    flat1 = tf.keras.layers.Flatten()
+
+    embedding_layer = tf.keras.layers.Embedding(input_dim=vocab_len, output_dim=wlen, weights=[embedding_matrix], trainable=False, input_length=(n+1)*N)
+    unflat1 = tf.keras.layers.Reshape((n+1, N, wlen)) 
 
     l1 = tf.keras.layers.Dense(150, activation='tanh')
     l2 = tf.keras.layers.Dense(300, activation='tanh') 
@@ -53,7 +58,7 @@ def create_model(dims):
     l3 = tf.keras.layers.Dense(opveclen, activation='tanh')
     out = tf.keras.layers.Flatten()
 
-    op = out(l3(avg(l2(l1(ip)))))
+    op = out(l3(avg(l2(l1(unflat1(embedding_layer(flat1(ip))))))))
 
     model = tf.keras.models.Model(inputs=ip, outputs=op)
     return model
@@ -106,9 +111,13 @@ def fit_model_single_data_point(model, sample_gen, batch_ind, epochs, dims, logg
 def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, checkpoint_path, num_data=[]):
     loss_fn = loss_fn_wrap2(dims)
     loss_fn_orig = loss_fn_wrap(dims)
+    
     if (num_data == []):
         num_data = len(sample_gen.qset)
-    num_iter = int(num_data/batch_size)
+        print("Number of data points: ", num_data)
+    batch_inds = range(num_data)
+    data, labels, data_size, _ = sample_gen.generate_samples(batch_inds)
+        
     loss_over_epochs = []
     elabel = 0
     if not (checkpoint_path == 0):
@@ -118,48 +127,23 @@ def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, check
             elabel += 1
     for e in range(epochs):
         print("Actual epoch = ", (e+1),"/", (epochs))
-        inds = range(num_data)
-        epoch_loss = 0.0
         if not checkpoint_path == 0:
             cp_path = os.path.join(checkpoint_path, "e"+str(elabel))
             cp_callback = tf.keras.callbacks.ModelCheckpoint(\
                 filepath=cp_path,verbose=0,save_weights_only=True)
         else:
             cp_callback = []
-        for k in tqdm(range(num_iter)):
-            batch_inds = [] 
-            if (len(inds) >= batch_size):
-                batch_inds = random.sample(inds, batch_size)
-            elif (len(inds) == 0):
-                break
-            else:
-                batch_inds = inds
-            inds = [x for x in inds if x not in batch_inds]
-            with tf.device('/CPU:0'):
-                data, labels, batch_size_curr, _ = sample_gen.generate_samples(batch_inds)
-            model.fit(data, labels, batch_size=batch_size_curr, \
-             epochs=1, callbacks=cp_callback, verbose=0)
-            op = model.predict(data)
-            sim = similarity(op, dims)
-            curr_loss = np.asscalar(np.array(tf.keras.backend.mean(loss_fn(labels, op))))
-            epoch_loss += curr_loss
-        epoch_loss /= (k+1)
-        print("Current loss = ", epoch_loss, "at the end of epoch ", e+1, ", saved as epoch: ", elabel)
+            
+        model.fit(data, labels, batch_size=batch_size, epochs=1, verbose=1, \
+         callbacks=[cp_callback])
         print("Dev metrics = ", get_metrics(model, dev_sample_gen, dims, verbose=False), \
             " at the end of epoch ", e+1, ".")
         elabel += 1
-        if (loss_over_epochs == []):
-            loss_over_epochs = [curr_loss]
-        else:
-            loss_over_epochs.append(curr_loss)
-        # if ((curr_loss) < 0.05):
-        #    return model 
     return (model, loss_over_epochs)
     
 
 def main():
 
-    tf.debugging.set_log_device_placement(True)
     # Arguments to main
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--train_type", type=str, required=True, \
@@ -216,14 +200,18 @@ def main():
     # Creating model    
     logger.log('Creating Model ...')
 
+    data_obj = DataStore(question_id, word_embed)
+
     n = 120 # number of sample questions per query question
     N = 100 # number of words per question
     opveclen = 100
     wlen = len(word_embed['the'])
     dims = n, N, wlen, opveclen 
-    model = create_model(dims)
-    train_sample_generator = SampleGenerator(question_id, train_q, train_pos, train_neg, dims, word_embed)
-    dev_sample_generator = SampleGenerator(question_id, dev_q, dev_pos, dev_neg, dims, word_embed)
+    model = create_model(dims, data_obj.embedding_matrix)
+
+
+    train_sample_generator = SampleGenerator(train_q, train_pos, train_neg, dims, data_obj)
+    dev_sample_generator = SampleGenerator(dev_q, dev_pos, dev_neg, dims, data_obj)
 
     logger.log('Model inputs and outputs')
     loss_fn = loss_fn_wrap2(dims)
@@ -251,7 +239,7 @@ def main():
     elif train_type == "full":    
         model, loss_over_epochs = fit_model(model, train_sample_generator, dev_sample_generator,\
          batch_size=args.batch_size, epochs=args.epochs, dims=dims, \
-         checkpoint_path=cp_path)
+         checkpoint_path=cp_path, num_data=[])
     else:
         print("Invalid train type entered.")
 
