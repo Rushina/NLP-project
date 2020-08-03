@@ -111,9 +111,13 @@ def fit_model_single_data_point(model, sample_gen, batch_ind, epochs, dims, logg
 def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, checkpoint_path, num_data=[]):
     loss_fn = loss_fn_wrap2(dims)
     loss_fn_orig = loss_fn_wrap(dims)
+    
     if (num_data == []):
         num_data = len(sample_gen.qset)
-    num_iter = int(num_data/batch_size)
+        print("Number of data points: ", num_data)
+    batch_inds = range(num_data)
+    data, labels, data_size, _ = sample_gen.generate_samples(batch_inds)
+        
     loss_over_epochs = []
     elabel = 0
     if not (checkpoint_path == 0):
@@ -123,48 +127,23 @@ def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, check
             elabel += 1
     for e in range(epochs):
         print("Actual epoch = ", (e+1),"/", (epochs))
-        inds = range(num_data)
-        epoch_loss = 0.0
         if not checkpoint_path == 0:
             cp_path = os.path.join(checkpoint_path, "e"+str(elabel))
             cp_callback = tf.keras.callbacks.ModelCheckpoint(\
                 filepath=cp_path,verbose=0,save_weights_only=True)
         else:
             cp_callback = []
-        for k in tqdm(range(num_iter)):
-            batch_inds = [] 
-            if (len(inds) >= batch_size):
-                batch_inds = random.sample(inds, batch_size)
-            elif (len(inds) == 0):
-                break
-            else:
-                batch_inds = inds
-            inds = [x for x in inds if x not in batch_inds]
-            with tf.device('/CPU:0'):
-                data, labels, batch_size_curr, _ = sample_gen.generate_samples(batch_inds)
-            model.fit(data, labels, batch_size=batch_size_curr, \
-             epochs=1, callbacks=cp_callback, verbose=0)
-            op = model.predict(data)
-            sim = similarity(op, dims)
-            curr_loss = np.asscalar(np.array(tf.keras.backend.mean(loss_fn(labels, op))))
-            epoch_loss += curr_loss
-        epoch_loss /= (k+1)
-        print("Current loss = ", epoch_loss, "at the end of epoch ", e+1, ", saved as epoch: ", elabel)
+            
+        model.fit(data, labels, batch_size=batch_size, epochs=1, verbose=1, \
+         callbacks=[cp_callback])
         print("Dev metrics = ", get_metrics(model, dev_sample_gen, dims, verbose=False), \
             " at the end of epoch ", e+1, ".")
         elabel += 1
-        if (loss_over_epochs == []):
-            loss_over_epochs = [curr_loss]
-        else:
-            loss_over_epochs.append(curr_loss)
-        # if ((curr_loss) < 0.05):
-        #    return model 
     return (model, loss_over_epochs)
     
 
 def main():
 
-    tf.debugging.set_log_device_placement(True)
     # Arguments to main
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--train_type", type=str, required=True, \
@@ -260,7 +239,7 @@ def main():
     elif train_type == "full":    
         model, loss_over_epochs = fit_model(model, train_sample_generator, dev_sample_generator,\
          batch_size=args.batch_size, epochs=args.epochs, dims=dims, \
-         checkpoint_path=cp_path)
+         checkpoint_path=cp_path, num_data=[])
     else:
         print("Invalid train type entered.")
 
