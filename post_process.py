@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import os
 from loss_function import loss_fn_wrap, similarity
-from sample_generator import SampleGenerator
+from sample_generator import SampleGenerator, DataStore
 from read_question_data import read_question_data
 import pickle
 import random
@@ -227,6 +227,8 @@ def main():
     question_id = pickle.load(f)
     f.close()
 
+    data_obj = DataStore(question_id, word_embed)
+
     n = 120
     N = 100
     opveclen = 100 
@@ -255,16 +257,16 @@ def main():
     sample_gen = dict()
 
     train_q, train_pos, train_neg = read_question_data(train_path)
-    sample_gen["train"] = SampleGenerator(question_id, train_q, train_pos, \
-            train_neg, dims, word_embed)
+    sample_gen["train"] = SampleGenerator(train_q, train_pos, \
+            train_neg, dims, data_obj)
 
     dev_q, dev_pos, dev_neg = read_question_data(dev_path)
-    sample_gen["dev"] = SampleGenerator(question_id, dev_q, dev_pos, \
-            dev_neg, dims, word_embed)
+    sample_gen["dev"] = SampleGenerator(dev_q, dev_pos, \
+            dev_neg, dims, data_obj)
 
     test_q, test_pos, test_neg = read_question_data(test_path)
-    sample_gen["test"] = SampleGenerator(question_id, test_q, test_pos, \
-            test_neg, dims, word_embed)
+    sample_gen["test"] = SampleGenerator(test_q, test_pos, \
+            test_neg, dims, data_obj)
 
     if (args.metrics):
         print(get_metrics(model, sample_gen[data_set], dims, num_data=num_data)) 
