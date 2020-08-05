@@ -16,14 +16,15 @@ class DataStore(object):
         self.word_inds = dict()
         num_words = len(self.word_embed.keys())
         wlen = len(word_embed[list(self.word_embed.keys())[0]])
-        self.embedding_matrix = np.zeros((num_words, wlen))
+        self.embedding_matrix_np = np.zeros((num_words, wlen))
         self.create_embedding_matrix()
+        self.embedding_matrix = tf.convert_to_tensor(self.embedding_matrix_np)
 
     def create_embedding_matrix(self):
         i = 0
         for word in self.word_embed.keys():
             self.word_inds[word] = i
-            self.embedding_matrix[i, :] = self.word_embed[word]
+            self.embedding_matrix_np[i, :] = self.word_embed[word]
             i += 1
 
 class SampleGenerator(object):
