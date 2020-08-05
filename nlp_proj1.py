@@ -48,7 +48,6 @@ def create_model(dims, embedding_matrix):
     vocab_len, _ = embedding_matrix.shape
     ip = tf.keras.layers.Input(shape=((n+1), N)) # query question + sample questions
     flat1 = tf.keras.layers.Flatten()
-    print("Shape of embedding matrix = ", embedding_matrix.shape)
 
     embedding_layer = tf.keras.layers.Embedding(input_dim=vocab_len, output_dim=wlen, weights=[embedding_matrix], trainable=False, input_length=(n+1)*N)
     unflat1 = tf.keras.layers.Reshape((n+1, N, wlen)) 
@@ -115,10 +114,8 @@ def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, check
     
     if (num_data == []):
         num_data = len(sample_gen.qset)
-        print("Number of data points: ", num_data)
     batch_inds = range(num_data)
     data, labels, data_size, _ = sample_gen.generate_samples(batch_inds)
-    print("Data shape = ", tf.shape(data)) 
     loss_over_epochs = []
     elabel = 0
     if not (checkpoint_path == 0):
@@ -202,14 +199,6 @@ def main():
     logger.log('Creating Model ...')
 
     data_obj = DataStore(question_id, word_embed)
-    for i in range(10):
-        word = list(data_obj.word_embed.keys())[i]
-        print("Word = ", word)
-        word_index = data_obj.word_inds[word]
-        print("Word index = ", word_index)
-        word_embedding = data_obj.embedding_matrix[word_index]
-        print("Word embedding is correct = ", tf.keras.backend.all(word_embedding == data_obj.word_embed[word]))
-
     n = 120 # number of sample questions per query question
     N = 100 # number of words per question
     opveclen = 100
@@ -237,7 +226,7 @@ def main():
     
     if (train_type == "load_from_ckp"):
         model.load_weights(train_opts)
-        print("Model loaded")
+        logger.log("Model loaded")
     elif train_type=="single":
         batch_ind = int(train_opts)
         model, loss_over_epochs = fit_model_single_data_point(model, train_sample_generator, epochs=args.epochs, batch_ind = batch_ind, dims=dims, logger=logger)
@@ -251,7 +240,7 @@ def main():
          batch_size=args.batch_size, epochs=args.epochs, dims=dims, \
          checkpoint_path=cp_path, num_data=[])
     else:
-        print("Invalid train type entered.")
+        logger.error("Invalid train type entered.")
 
     # !mkdir -p saved_model
     if (args.save_model):
