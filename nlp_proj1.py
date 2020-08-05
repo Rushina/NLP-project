@@ -10,7 +10,7 @@ from sample_generator import SampleGenerator, DataStore
 from loss_function import similarity, loss_fn_wrap, loss_fn_wrap2
 from read_question_data import read_question_data
 from tqdm import tqdm
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 class Logger(object):
     def __init__(self, mode='log'):
@@ -48,6 +48,7 @@ def create_model(dims, embedding_matrix):
     vocab_len, _ = embedding_matrix.shape
     ip = tf.keras.layers.Input(shape=((n+1), N)) # query question + sample questions
     flat1 = tf.keras.layers.Flatten()
+    print("Shape of embedding matrix = ", embedding_matrix.shape)
 
     embedding_layer = tf.keras.layers.Embedding(input_dim=vocab_len, output_dim=wlen, weights=[embedding_matrix], trainable=False, input_length=(n+1)*N)
     unflat1 = tf.keras.layers.Reshape((n+1, N, wlen)) 
@@ -117,7 +118,7 @@ def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, check
         print("Number of data points: ", num_data)
     batch_inds = range(num_data)
     data, labels, data_size, _ = sample_gen.generate_samples(batch_inds)
-        
+    print("Data shape = ", tf.shape(data)) 
     loss_over_epochs = []
     elabel = 0
     if not (checkpoint_path == 0):
@@ -201,6 +202,13 @@ def main():
     logger.log('Creating Model ...')
 
     data_obj = DataStore(question_id, word_embed)
+    for i in range(10):
+        word = list(data_obj.word_embed.keys())[i]
+        print("Word = ", word)
+        word_index = data_obj.word_inds[word]
+        print("Word index = ", word_index)
+        word_embedding = data_obj.embedding_matrix[word_index]
+        print("Word embedding is correct = ", tf.keras.backend.all(word_embedding == data_obj.word_embed[word]))
 
     n = 120 # number of sample questions per query question
     N = 100 # number of words per question
@@ -208,6 +216,7 @@ def main():
     wlen = len(word_embed['the'])
     dims = n, N, wlen, opveclen 
     model = create_model(dims, data_obj.embedding_matrix)
+    print(model.summary())
 
 
     train_sample_generator = SampleGenerator(train_q, train_pos, train_neg, dims, data_obj)
@@ -215,7 +224,8 @@ def main():
 
     logger.log('Model inputs and outputs')
     loss_fn = loss_fn_wrap2(dims)
-    model.compile(optimizer='adam', loss=loss_fn)
+    opt = tf.keras.optimizers.Adam(learning_rate=0.001)
+    model.compile(optimizer=opt, loss=loss_fn)
     if (args.load):
         model.load_weights(args.load)
 
