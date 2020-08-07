@@ -135,7 +135,7 @@ def fit_model(model, sample_gen, dev_sample_gen, batch_size, epochs, dims, check
         model.fit(data, labels, batch_size=batch_size, epochs=1, verbose=1, \
          callbacks=[cp_callback])
         print("Dev metrics = ", get_metrics(model, dev_sample_gen, dims, verbose=False), \
-            " at the end of epoch ", e+1, ".")
+            " at the end of epoch ", e+1, ". Stored as number = ", elabel)
         elabel += 1
     return (model, loss_over_epochs)
     
@@ -216,6 +216,7 @@ def main():
     opt = tf.keras.optimizers.Adam(learning_rate=0.001)
     model.compile(optimizer=opt, loss=loss_fn)
     if (args.load):
+
         model.load_weights(args.load)
 
 
